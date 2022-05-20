@@ -169,7 +169,7 @@ class VDOM {
 
     let childs = await this.#children(this.#state);
 
-    childs.forEach((c) => this.#mnt.appendChild(await c.render()));
+    childs.forEach(async (c) => this.#mnt.appendChild(await c.render()));
   }
 }
 

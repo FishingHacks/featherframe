@@ -10,6 +10,7 @@ class App {
             .replaceAll("%description", this.#config.description)
             .replaceAll("%apppath", path);
         }
+        if (this.#config.launch) console.error("Auto Launch of additional programs is not yet implemented :<")
     }
     get path() {return this.#path;}
     get html() {return this.#html;}
@@ -22,11 +23,10 @@ let app;
  * 
  * @param {string} path 
  */
-function loadApp(path, express) {
+async function loadApp(path, express) {
     app = new App(path);
+    await require("./router.js")(app, express);
     return app;
-
-    require("./router.js")(app, express);
 }
 
 module.exports = {

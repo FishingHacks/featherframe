@@ -1,4 +1,4 @@
-import {html, render, useIDState} from "../../../renderengine/framework.js";
+import {html, render, useIDState} from "/framework";
 
 render({children: ()=>{
     let [count, setCount] = useIDState("counterone", 0);
