@@ -1,9 +1,11 @@
-# Framework
+# Lightframe
 TODO: Insert Logo here!
 
 ---
-Please make an Issue with names, I am the most uncreative person
 
-Framework is a simple, lightweight and easy-to-understand solution for building Web Applications.
+
+Use Lightframe at your own Risk!
+
+Lightframe is a simple, lightweight and easy-to-understand solution for building Web Applications.
 
 TODO: Write more
