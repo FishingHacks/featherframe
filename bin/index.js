@@ -17,7 +17,7 @@ const path = join(process.cwd(), process.argv[2]);
 const port = (process.argv[3] || 8080);
 
 const express = require("express")();
-
+process.chdir(join(process.argv[1], "../../"))
 const { loadApp } = require(join(process.argv[1], "../../framework/index.js"));
 
 (async function() {

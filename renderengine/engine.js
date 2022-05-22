@@ -39,15 +39,17 @@ class VNode {
   tag = "";
 
   constructor(tag, attrs = { events: {} }, ...childs) {
-    if (typeof tag == "function") {
-      let node = tag(attrs, childs);
-      attrs = node.attributes;
-      tag = node.tag;
-      childs = node.children;
-    }
-
     let children = childs || [];
     attrs = attrs || { events: {} };
+    if (typeof tag == "function") {
+      let node = tag(attrs, children);
+      tag = "unknown";
+      children = node instanceof Array ? node : [node];
+      attrs=[];
+    }
+    else {
+      children=children[0] instanceof Array?children[0]:[children[0]];
+    }
     if (!attrs.events || !(attrs.events instanceof Array)) {
       attrs.events = {};
     }
@@ -76,14 +78,13 @@ class VNode {
   render() {
     let element = document.createElement(this.tag);
 
-    element.setAttribute("renderengine-el", "")
+    element.setAttribute("renderengine-el", "");
 
     let attrKeys = Object.keys(this.#attrs);
     attrKeys.forEach((key) => {
       if (key != null && key != undefined && key != "")
         element.setAttribute(key, this.#attrs[key]);
     });
-
 
     Object.keys(this.events).forEach((ev) => {
       element.addEventListener(ev, (...args) =>
@@ -92,10 +93,12 @@ class VNode {
     });
 
     this.#children.forEach((node) =>
+    {
       element.appendChild(
         node instanceof VNode ? node.render() : document.createTextNode(node)
       )
-    );
+      }
+      );
 
     return element;
   }
@@ -164,12 +167,16 @@ class VDOM {
 
   async render() {
     Object.values(this.#mnt.children).forEach((c) => {
-      if (c.getAttribute("renderengine-el")!=null) this.#mnt.removeChild(c);
+      if (c.getAttribute("renderengine-el") != null) this.#mnt.removeChild(c);
     });
 
     let childs = await this.#children(this.#state);
-
-    childs.forEach(async (c) => this.#mnt.appendChild(await c.render()));
+    childs = childs instanceof Array?childs:[childs];
+    childs.forEach(async (c) => {
+      this.#mnt.appendChild(
+        typeof c == "string" ? document.createTextNode(c) : await c.render()
+      );
+    });
   }
 }
 
