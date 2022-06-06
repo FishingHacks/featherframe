@@ -45,10 +45,9 @@ class VNode {
       let node = tag(attrs, children);
       tag = "unknown";
       children = node instanceof Array ? node : [node];
-      attrs=[];
-    }
-    else {
-      children=children[0] instanceof Array?children[0]:[children[0]];
+      attrs = [];
+    } else {
+      children = children[0] instanceof Array ? children[0] : [children[0]];
     }
     if (!attrs.events || !(attrs.events instanceof Array)) {
       attrs.events = {};
@@ -68,6 +67,11 @@ class VNode {
 
     if (typeof this.tag != "string" && this.tag == "")
       throw new Error("Attribute has to be a String and not empty.");
+
+    attrs = {};
+    attrKeys.forEach((el, i) =>
+      el != null ? (attrs[el] = attrVals[i]) : null
+    );
 
     this.#children = children;
     this.#attrs = attrs;
@@ -91,15 +95,34 @@ class VNode {
         this.events[ev](new HEvent(this, args[0], args))
       );
     });
+    while (
+      this.#children.reduce(
+        (acc, el) => (el instanceof Array ? true : acc),
+        false
+      )
+    ) {
+      let chc = this.#children.map((el) => el);
+      this.#children = [];
 
-    this.#children.forEach((node) =>
-    {
+      chc.forEach((el) => {
+        if (el instanceof Array) {
+          el.forEach((el) => this.#children.push(el));
+        } else {
+          this.#children.push(el);
+        }
+      });      
+    }
+
+    this.#children.forEach((node) => {
       element.appendChild(
         node instanceof VNode ? node.render() : document.createTextNode(node)
-      )
-      }
       );
+    });
 
+    if (typeof element.getAttribute("ref") == "string") {
+      this.#attrs.ref ? (this.#attrs.ref.current = element) : null;
+      element.removeAttribute("ref");
+    }
     return element;
   }
 
@@ -147,7 +170,7 @@ class VDOM {
     { state, mnt, children, subscriptions } = {
       state: {},
       mnt: document.body,
-      children: (state) => {},
+      children: (state) => [],
       subscriptions: {},
     }
   ) {
@@ -166,16 +189,36 @@ class VDOM {
   }
 
   async render() {
+    i = 0;
+    ieffect = 0;
+    iref = 0;
+
     Object.values(this.#mnt.children).forEach((c) => {
       if (c.getAttribute("renderengine-el") != null) this.#mnt.removeChild(c);
     });
 
     let childs = await this.#children(this.#state);
-    childs = childs instanceof Array?childs:[childs];
+    childs = childs instanceof Array ? childs : [childs];
+
+    while (childs.reduce((acc, val)=>val instanceof Array?true:acc, false)) {
+    let newchilds = childs;
+    childs = [];
+
+    newchilds.forEach(el=>el instanceof Array?childs.push(...el):childs.push(el));
+  }
+
     childs.forEach(async (c) => {
       this.#mnt.appendChild(
         typeof c == "string" ? document.createTextNode(c) : await c.render()
       );
+    });
+
+    effects = effects.map((el) => {
+      if (typeof el.func == "function" && el.changed) {
+        el.ret = el.func();
+        el.changed = false;
+      }
+      return el;
     });
   }
 }
@@ -183,7 +226,6 @@ class VDOM {
 let vdom;
 
 export function rerender() {
-  i = 0;
   vdom?.render?.();
 }
 
@@ -206,8 +248,7 @@ export async function render(
     subscriptions: {},
   }
 ) {
-  await waitForLoad;
-  i = 0;
+  await waitForLoad();
   vdom = new VDOM(parameters);
 }
 
@@ -221,13 +262,13 @@ let idstates = {};
  * @returns {[T, (val: T)=>void]}
  */
 export function useState(stdval) {
-  i++;
   if (states[i] == null || states[i] == undefined) states[i] = stdval;
   let index = i;
   function setState(val) {
     states[index] = val;
     rerender();
   }
+  i++;
   return [states[index], setState];
 }
 
@@ -272,4 +313,44 @@ export function getTitle() {
  */
 export function h(tag, attrs, ...children) {
   return new VNode(tag, attrs, children);
+}
+
+let effects = [];
+let ieffect = 0;
+
+export function useEffect(func, to_change) {
+  if (effects[ieffect] == null || effects[ieffect] == undefined) {
+    effects[ieffect] = {
+      func: func,
+      lastchange: to_change,
+      ret: undefined,
+      changed: true,
+    };
+  } else {
+    if (
+      effects[ieffect].lastchange != null &&
+      effects[ieffect].lastchange != undefined &&
+      effects[ieffect].lastchange == to_change
+    ) {
+      effects[ieffect].changed = false;
+    } else {
+      effects[ieffect].changed = true;
+      effects[ieffect].lastchange = to_change;
+    }
+    effects[ieffect].func = func;
+  }
+  ieffect++;
+}
+
+const refs = [];
+let iref = 0;
+
+export function useRef(stdobj) {
+  if (refs[iref] == null || refs[iref] == undefined) {
+    refs[iref] = {
+      current: stdobj,
+    };
+  }
+  iref++;
+  return refs[iref - 1];
 }

@@ -97,12 +97,15 @@ async function route(app, express) {
         try {
           orig = join(pagedir, `${el.path}.${el.method}.js`);
           await access(orig, R_OK | W_OK);
-          require(orig)(req, res, next);
-          return;
+          try {
+            require(orig)(req, res, next);
+            return;
+          } catch (e) {
+            res.status(500).send("Error: Internal Server error");
+            console.log("Error:", e);
+          }
         } catch {
-          res.send(
-            app.html.replace("%path", `/pages${el.path}.${el.method}.js`)
-          );
+          res.status(200).send(app.html.replaceAll("%path", `/pages${el.path}.${el.method}.js`));
         }
       }
     );
@@ -110,10 +113,13 @@ async function route(app, express) {
 
   console.log("Adding public directory middleware");
   express.use(require("express").static(publicdir));
-  
+
   console.log("Adding the error404-page");
-  if (!app.config.e404page) console.log("Custom 404 page not defined. Using the Standard 404 page")
-  let e404page = app.config.e404page || `<!DOCTYPE html>
+  if (!app.config.e404page)
+    console.log("Custom 404 page not defined. Using the Standard 404 page");
+  let e404page =
+    app.config.e404page ||
+    `<!DOCTYPE html>
   <html lang="en">
   <head>
       <meta charset="UTF-8">
@@ -126,7 +132,9 @@ async function route(app, express) {
       <a href="/">Home</a>
   </body>
   </html>`;
-  express.all("*", (req, res)=>res.headersSent?null:res.status(404).send(e404page));
+  express.all("*", (req, res) =>
+    res.headersSent ? null : res.status(404).send(e404page)
+  );
 }
 
 async function getPages(pagedir) {
@@ -140,7 +148,7 @@ async function getPages(pagedir) {
     .map((el) => el.replace(pagedir, "").replace(/\.js$/, ""));
   return paths.map((el) => {
     let spltd = el.split(".");
-    return { method: spltd.pop(), path: spltd.join()};
+    return { method: spltd.pop(), path: spltd.join() };
   });
 }
 /*  /\
