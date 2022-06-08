@@ -110,7 +110,7 @@ class VNode {
         } else {
           this.#children.push(el);
         }
-      });      
+      });
     }
 
     this.#children.forEach((node) => {
@@ -197,29 +197,121 @@ class VDOM {
       if (c.getAttribute("renderengine-el") != null) this.#mnt.removeChild(c);
     });
 
-    let childs = await this.#children(this.#state);
-    childs = childs instanceof Array ? childs : [childs];
+    try {
+      let childs = await this.#children(this.#state);
+      childs = childs instanceof Array ? childs : [childs];
 
-    while (childs.reduce((acc, val)=>val instanceof Array?true:acc, false)) {
-    let newchilds = childs;
-    childs = [];
+      while (
+        childs.reduce((acc, val) => (val instanceof Array ? true : acc), false)
+      ) {
+        let newchilds = childs;
+        childs = [];
 
-    newchilds.forEach(el=>el instanceof Array?childs.push(...el):childs.push(el));
-  }
-
-    childs.forEach(async (c) => {
-      this.#mnt.appendChild(
-        typeof c == "string" ? document.createTextNode(c) : await c.render()
-      );
-    });
-
-    effects = effects.map((el) => {
-      if (typeof el.func == "function" && el.changed) {
-        el.ret = el.func();
-        el.changed = false;
+        newchilds.forEach((el) =>
+          el instanceof Array ? childs.push(...el) : childs.push(el)
+        );
       }
-      return el;
-    });
+
+      childs.forEach(async (c) => {
+        this.#mnt.appendChild(
+          typeof c == "string" ? document.createTextNode(c) : await c.render()
+        );
+      });
+
+      effects = effects.map((el) => {
+        if (typeof el.func == "function" && el.changed) {
+          el.ret = el.func();
+          el.changed = false;
+        }
+        return el;
+      });
+    } catch (e) {
+      console.error(
+        "An error occured while trying to render the application",
+        e
+      );
+
+      let stacktrace = e.stack;
+
+      let flc = stacktrace.match(/\(([^ \n])+\.js:[0-9]+:[0-9]+\)/)[0];
+      flc = flc.substr(1, flc.length - 2).split(":");
+
+      let c = Number(flc.pop());
+      let l = Number(flc.pop());
+      let f = flc.join(":");
+
+      let errel = document.createElement("div");
+
+        errel.classList.add("errel")
+        errel.setAttribute("renderengine-el", "");
+
+        errel.style.color="#fff";
+
+        document.body.style.backgroundColor="#24292f";
+
+      let titleel = document.createElement("h1");
+      titleel.textContent =
+        "An Error occured whilst trying to render the Application";
+      errel.append(titleel);
+
+      let stackel = document.createElement("p");
+      stackel.setAttribute(
+        "style",
+        "width: max-content; font-family: monospace; border: 3px white solid; border-radius: 15px; padding: 10px; background: rgba(168, 91, 91, 0.467);"
+      );
+      stackel.innerHTML = stacktrace
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll(" ", "&nbsp;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("\n", "<br />");
+      errel.append(stackel);
+
+      let contents = await await fetch(f).then((el) => el.text());
+
+      contents = contents.split("\n").map((el, i) => {
+        if (i < l + 2 && i > l - 4) return el;
+        else return null;
+      });
+      let newcontents = [];
+      contents.forEach((el) =>
+        typeof el == "string" ? newcontents.push(el) : null
+      );
+      contents = newcontents.map(
+        (el, i) =>
+          `<span style="background-color:rgba(95, 84, 84, 0.333);color:#ddd;">${
+            l - 2 + i
+          }${
+            (l - 2 + i).toString().length == l
+              ? "&nbsp;"
+              : (l - 2 + i).toString().length < l
+              ? "&nbsp;&nbsp;"
+              : ""
+          }|&nbsp;</span>${el
+            .replaceAll(" ", "&nbsp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")}`
+      );
+
+      contents = [
+        ...contents.slice(0, 3),
+        '<span style="color: #f00; font-weight: bold;">' +
+          addArrowUpAtChar(c + 4 + l.toString().length).replaceAll(
+            " ",
+            "&nbsp;"
+          ) +
+          "</span>",
+        ...contents.slice(3),
+      ];
+
+      let codep = document.createElement("p");
+      codep.innerHTML = contents.join("\n").replaceAll("\n", "<br />");
+      codep.setAttribute("style", "font-family: monospace;");
+      errel.append(codep);
+
+      this.#mnt.appendChild(errel);
+    }
   }
 }
 
@@ -353,4 +445,14 @@ export function useRef(stdobj) {
   }
   iref++;
   return refs[iref - 1];
+}
+
+function addArrowUpAtChar(c) {
+  if (typeof c != "number" && isNaN(Number(c))) return;
+  if (typeof c != "number") c = Number(c);
+  let ret = "";
+  for (let i = 1; i < c; i++) {
+    ret += " ";
+  }
+  return ret + "^";
 }

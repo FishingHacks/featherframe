@@ -44,12 +44,37 @@ const AVAILABLE_METHODS = [
  * @param {application} express
  */
 async function route(app, express) {
+  const path = app.path;
+  let middlewaredir = join(path, "middleware");
+  let pagedir = join(path, "pages");
+  let publicpagedir = join(path, "public", "pages");
+  let publicdir = join(path, "public");
+
+  // server renderengine first, so that nothing breaks (hopefully)
   const framework_content = await readFile(
     join(process.cwd(), "renderengine/framework.js")
   );
   const engine_content = await readFile(
     join(process.cwd(), "renderengine/engine.js")
   );
+
+
+  const stdico_content = await readFile(
+    join(process.cwd(), "framework/stdlogo.ico")
+  );
+
+  // display the standard favicon, when none found
+  if (
+    !existsSync(join(publicdir, "favicon.ico")) ||
+    !lstatSync(join(publicdir, "favicon.ico")).isFile()
+  ) {
+    express.all("/favicon.ico", (req, res) => {
+      res.set({ "Content-Type": "image/x-icon; charset=UTF-8" });
+      res.send(stdico_content);
+    });
+  }
+
+
   express.get("/engine", async (req, res) => {
     res.set({ "Content-Type": "application/javascript; charset=UTF-8" });
     res.send(engine_content);
@@ -58,11 +83,7 @@ async function route(app, express) {
     res.set({ "Content-Type": "application/javascript; charset=UTF-8" });
     res.send(framework_content);
   });
-  const path = app.path;
-  let middlewaredir = join(path, "middleware");
-  let pagedir = join(path, "pages");
-  let publicpagedir = join(path, "public", "pages");
-  let publicdir = join(path, "public");
+
   if (!existsSync(publicdir))
     return console.error("No public directory found!");
   if (existsSync(middlewaredir) && isDir(middlewaredir)) {
@@ -105,7 +126,11 @@ async function route(app, express) {
             console.log("Error:", e);
           }
         } catch {
-          res.status(200).send(app.html.replaceAll("%path", `/pages${el.path}.${el.method}.js`));
+          res
+            .status(200)
+            .send(
+              app.html.replaceAll("%path", `/pages${el.path}.${el.method}.js`)
+            );
         }
       }
     );

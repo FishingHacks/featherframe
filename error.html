@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <div class="err">
+        <h1>An Error occured whilst trying to render the Application</h1>
+        <p style="border: 3px black solid; border-radius: 15px; padding: 10px; background: rgba(168, 91, 91, 0.467);">ReferenceError: cnsole is not defined<br />
+            &nbsp;at eval (eval at &lt;anonymous> (index.get.js:15:11), &lt;anonymous>:1:1)<br />
+            &nbsp;at VDOM.&lt;anonymous> (index.get.js:15:11)<br />
+            &nbsp;at VDOM.render (engine:201:40)<br />
+            &nbsp;at new VDOM (engine:188:10)<br />
+            &nbsp;at render (engine:266:10)</p>
+
+        <p style="font-family: monospace;">
+            <span style="background-color: rgba(95, 84, 84, 0.333); color: #000;">&nbsp;&nbsp;1&nbsp;|&nbsp;</span>let arr = ["a", "b", "c"]<br />
+            <span style="background-color: rgba(95, 84, 84, 0.333); color: #000;">&nbsp;&nbsp;2&nbsp;|&nbsp;</span><br />
+            <span style="color: #f00; font-weight: bold; background-color: rgba(95, 84, 84, 0.333);">&nbsp;></span><span style="background-color: rgba(95, 84, 84, 0.333); color: #000;">3&nbsp;|&nbsp;</span>await eval("cnsole.log(\"Hello, World!\")");<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;^<br />
+            <span style="background-color: rgba(95, 84, 84, 0.333); color: #000;">&nbsp;&nbsp;4&nbsp;|&nbsp;</span><br />
+            <span style="background-color: rgba(95, 84, 84, 0.333); color: #000;">&nbsp;&nbsp;5 | </span>return html`<br />
+        </p>
+    </div>
+</body>
+</html>
