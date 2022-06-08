@@ -1,6 +1,6 @@
 # Lightframe
 
-<svg src="./.github/assets/logo.svg">
+<svg src="https://raw.githubusercontent.com/FishingHacks/lightframe/master/.github/assets/logo.svg">
 
 <p align="center">
 	<img alt="Star badge" src="https://img.shields.io/github/stars/FishingHacks/lightframe?style=for-the-badge&labelColor=000">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img alt="License (MIT) Badge" src="https://img.shields.io/github/license/FishingHacks/lightframe?style=for-the-badge&labelColor=000">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img alt="Size Badge" src="https://img.shields.io/github/languages/code-size/FishingHacks/lightframe?label=Size&style=for-the-badge&labelColor=000"
