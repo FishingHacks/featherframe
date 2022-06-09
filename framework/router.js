@@ -8,6 +8,8 @@ const {
 const { join } = require("path");
 const { access, readFile } = require("fs/promises");
 
+process.chdir(join(module.path, "../"));
+
 const path = require("path");
 const fs = require("fs");
 
@@ -51,8 +53,8 @@ async function route(app, express) {
   let publicdir = join(path, "public");
 
   // server renderengine first, so that nothing breaks (hopefully)
-  const framework_content = await readFile("../renderengine/framework.js");
-  const engine_content = await readFile("../renderengine/engine.js");
+  const framework_content = await readFile("renderengine/framework.js");
+  const engine_content = await readFile("renderengine/engine.js");
 
   const stdico_content = await readFile("framework/stdlogo.ico");
 
