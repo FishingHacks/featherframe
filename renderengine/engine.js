@@ -218,6 +218,8 @@ class VDOM {
         );
       });
 
+      await new Promise(r=>setTimeout(r, 0)); // Bugfix for a weird problem, where it doesn't clear out the page when a new render event is caused immediately in useEffect
+
       effects = effects.map((el) => {
         if (typeof el.func == "function" && el.changed) {
           el.ret = el.func();
