@@ -1,3 +1,7 @@
+const { application } = require("express");
+
+const { redBright } = require("chalk");
+
 class App {
     #path;
     #config;
@@ -10,7 +14,7 @@ class App {
             .replaceAll("%description", this.#config.description)
             .replaceAll("%apppath", path);
         }
-        if (this.#config.launch) console.error("Auto Launch of additional programs is not yet implemented :<")
+        if (this.#config.launch) console.error(redBright("Auto Launch of additional programs is not yet implemented :<"));
     }
     get path() {return this.#path;}
     get html() {return this.#html;}
@@ -22,10 +26,14 @@ let app;
 /**
  * 
  * @param {string} path 
+ * @param {Application} express
+ * @param {{debugprint?: bool}} config
+ * 
+ * @returns {App} the application
  */
-async function loadApp(path, express) {
+async function loadApp(path, express, config={debugprint: false}) {
     app = new App(path);
-    await require("./router.js")(app, express);
+    await require("./router.js")(app, express, config);
     return app;
 }
 

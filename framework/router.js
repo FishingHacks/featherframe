@@ -12,6 +12,7 @@ process.chdir(join(module.path, "../"));
 
 const path = require("path");
 const fs = require("fs");
+const { redBright } = require("chalk");
 
 const AVAILABLE_METHODS = [
   "checkout",
@@ -44,8 +45,9 @@ const AVAILABLE_METHODS = [
 /**
  * @param {App} app
  * @param {application} express
+ * @param {{debugprint?: bool}} pos1
  */
-async function route(app, express) {
+async function route(app, express, { debugprint }) {
   const path = app.path;
   let middlewaredir = join(path, "middleware");
   let pagedir = join(path, "pages");
@@ -79,33 +81,36 @@ async function route(app, express) {
   });
 
   if (!existsSync(publicdir))
-    return console.error("No public directory found!");
+    return debugprint ? console.error(redBright("No public directory found!")) : null;
   if (existsSync(middlewaredir) && isDir(middlewaredir)) {
-    console.log("Collecting middleware packages . . . .");
+    if (debugprint) console.log("Collecting middleware packages . . . .");
     let middlewarepkgs = [];
     readdirSync(middlewaredir).forEach((el) => {
       if (!el.endsWith(".js")) return;
       if (!isFile(join(middlewaredir, el))) return;
       middlewarepkgs.push(join(middlewaredir, el));
     });
-    console.log("Registering middleware packages . . . .");
+    if (debugprint) console.log("Registering middleware packages . . . .");
     middlewarepkgs.forEach((el) => express.use(require(el)));
   } else {
-    console.log("No Middleware directory");
+    if (debugprint) console.log(redBright("No Middleware directory"));
   }
 
-  let pages = await getPages(pagedir);
+  let pages = await getPages(pagedir, debugprint);
 
-  (await getPubPages(publicpagedir)).forEach((path) =>
+  (await getPubPages(publicpagedir, debugprint)).forEach((path) =>
     pages.includes(path) ? null : pages.push(path)
   );
 
   pages.forEach((el) => {
     if (!AVAILABLE_METHODS.includes(el.method.toLowerCase()))
-      return console.error(
-        "The method " + el.method + " is not a valid HTTP method :<"
-      );
-    console.log(`Registering ${el.method.toUpperCase()} ${el.path}`);
+      return debugprint
+        ? console.error(redBright(
+            "The method " + el.method + " is not a valid HTTP method :<"
+          ))
+        : null;
+    if (debugprint)
+      console.log(`Registering ${el.method.toUpperCase()} ${el.path}`);
     express[el.method.toLowerCase()](
       el.path.replace(/index$/, ""),
       async (req, res, next) => {
@@ -117,7 +122,7 @@ async function route(app, express) {
             return;
           } catch (e) {
             res.status(500).send("Error: Internal Server error");
-            console.log("Error:", e);
+            if (debugprint) console.log("Error:", e);
           }
         } catch {
           res
@@ -130,12 +135,13 @@ async function route(app, express) {
     );
   });
 
-  console.log("Adding public directory middleware");
+  if (debugprint) console.log("Adding public directory middleware");
   express.use(require("express").static(publicdir));
 
-  console.log("Adding the error404-page");
+  if (debugprint) console.log("Adding the error404-page");
   if (!app.config.e404page)
-    console.log("Custom 404 page not defined. Using the Standard 404 page");
+    if (debugprint)
+      console.log("Custom 404 page not defined. Using the Standard 404 page");
   let e404page =
     app.config.e404page ||
     `<!DOCTYPE html>
@@ -156,9 +162,9 @@ async function route(app, express) {
   );
 }
 
-async function getPages(pagedir) {
+async function getPages(pagedir, debugprint) {
   if (!existsSync(pagedir)) {
-    console.log("No Serverside pages found");
+    if (debugprint) console.log(redBright("No Serverside pages found"));
     return [];
   }
 
@@ -173,9 +179,9 @@ async function getPages(pagedir) {
 /*  /\
     |  I know, they do practically the same thing, feel like this is more readable :>
     \/ */
-async function getPubPages(publicpagedir) {
+async function getPubPages(publicpagedir, debugprint) {
   if (!existsSync(publicpagedir)) {
-    console.log("No Pages for the renderengine found!");
+    if (debugprint) console.log(redBright("No Pages for the renderengine found!"));
     return [];
   }
 
