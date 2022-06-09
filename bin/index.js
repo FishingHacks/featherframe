@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 const { join } = require("path");
 
 if (process.argv.length < 3) {
@@ -9,7 +11,7 @@ if (process.argv.length < 3) {
 }
 
 if(process.argv[2] == "-v" || process.argv[2] == "--version") {
-    console.log("lightframe v" + require(join(process.argv[1], "../../package.json")).version);
+    console.log("lightframe v" + require("../package.json").version);
     process.exit(0);
 }
 
@@ -18,7 +20,7 @@ const port = (process.argv[3] || 8080);
 
 const express = require("express")();
 process.chdir(join(process.argv[1], "../../"))
-const { loadApp } = require(join(process.argv[1], "../../framework/index.js"));
+const { loadApp } = require("../framework/index.js");
 
 (async function() {
     await loadApp(path, express);

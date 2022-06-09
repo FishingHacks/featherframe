@@ -51,17 +51,10 @@ async function route(app, express) {
   let publicdir = join(path, "public");
 
   // server renderengine first, so that nothing breaks (hopefully)
-  const framework_content = await readFile(
-    join(process.cwd(), "renderengine/framework.js")
-  );
-  const engine_content = await readFile(
-    join(process.cwd(), "renderengine/engine.js")
-  );
+  const framework_content = await readFile("../renderengine/framework.js");
+  const engine_content = await readFile("../renderengine/engine.js");
 
-
-  const stdico_content = await readFile(
-    join(process.cwd(), "framework/stdlogo.ico")
-  );
+  const stdico_content = await readFile("framework/stdlogo.ico");
 
   // display the standard favicon, when none found
   if (
@@ -73,7 +66,6 @@ async function route(app, express) {
       res.send(stdico_content);
     });
   }
-
 
   express.get("/engine", async (req, res) => {
     res.set({ "Content-Type": "application/javascript; charset=UTF-8" });
