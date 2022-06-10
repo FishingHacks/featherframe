@@ -359,6 +359,7 @@ export function useState(stdval) {
   if (states[i] == null || states[i] == undefined) states[i] = stdval;
   let index = i;
   function setState(val) {
+    if(typeof val == "function") val = val(states[index]);
     states[index] = val;
     rerender();
   }
@@ -376,6 +377,7 @@ export function useIDState(id, stdval) {
   if (idstates[id] == null || idstates[id] == undefined) idstates[id] = stdval;
 
   function setState(val) {
+    if(typeof val == "function") val = val(idstates[id]);
     idstates[id] = val;
     rerender();
   }
@@ -457,4 +459,38 @@ function addArrowUpAtChar(c) {
     ret += " ";
   }
   return ret + "^";
+}
+
+/**
+ * 
+ * @param {(T, any)=>T} reducer get's called, when dispatch is called with the action and the current state
+ * @param {T} initialValue the initial Value
+ * @returns {[T, (any)=>void]} the State and the dispatch function
+ */
+export function useReducer(reducer, initialValue) {
+  const [state, setState] = useState(initialValue);
+
+  function dispatch(action) {
+    setState(reducer(state, action));
+  }
+
+  return [state, dispatch];
+}
+
+const contexts = {};
+
+/**
+ * @param {any} el the value of the context
+ * @param {string} key the key of the context
+ */
+export function createContext(el, key) {
+  contexts[key] = el;
+}
+
+/**
+ * @param {string} key the key of the context
+ * @returns {any} the value set for the context
+ */
+export function useContext(key) {
+  return contexts[key];
 }
