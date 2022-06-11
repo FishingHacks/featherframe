@@ -53,6 +53,7 @@ async function route(app, express, { debugprint }) {
   let pagedir = join(path, "pages");
   let publicpagedir = join(path, "public", "pages");
   let publicdir = join(path, "public");
+  let packagedir = join(path, "node_modules");
 
   // server renderengine first, so that nothing breaks (hopefully)
   const framework_content = await readFile("renderengine/framework.js");
@@ -137,6 +138,8 @@ async function route(app, express, { debugprint }) {
 
   if (debugprint) console.log("Adding public directory middleware");
   express.use(require("express").static(publicdir));
+
+  express.use(require("express").static(packagedir), "/packages")
 
   if (debugprint) console.log("Adding the error404-page");
   if (!app.config.e404page)

@@ -1,4 +1,4 @@
-export {h, rerender, useState, useIDState, setTitle, getTitle, useEffect, useRef, useReducer, createContext, useContext } from "./engine";
+export {h, rerender, useState, useIDState, setTitle, getTitle, useEffect, useRef, useReducer, createContext, useContext, require } from "./engine";
 import htm from 'https://unpkg.com/htm?module'
 import { h, render as r } from "/engine";
 export function requireCSS(src) {

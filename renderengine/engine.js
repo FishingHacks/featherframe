@@ -494,3 +494,8 @@ export function createContext(el, key) {
 export function useContext(key) {
   return contexts[key];
 }
+
+export function require(path) {
+  if(!path.startsWith("/")) path = "/"+path;
+  return import("/packages" + path);
+}
