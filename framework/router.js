@@ -82,7 +82,9 @@ async function route(app, express, { debugprint }) {
   });
 
   if (!existsSync(publicdir))
-    return debugprint ? console.error(redBright("No public directory found!")) : null;
+    return debugprint
+      ? console.error(redBright("No public directory found!"))
+      : null;
   if (existsSync(middlewaredir) && isDir(middlewaredir)) {
     if (debugprint) console.log("Collecting middleware packages . . . .");
     let middlewarepkgs = [];
@@ -106,9 +108,11 @@ async function route(app, express, { debugprint }) {
   pages.forEach((el) => {
     if (!AVAILABLE_METHODS.includes(el.method.toLowerCase()))
       return debugprint
-        ? console.error(redBright(
-            "The method " + el.method + " is not a valid HTTP method :<"
-          ))
+        ? console.error(
+            redBright(
+              "The method " + el.method + " is not a valid HTTP method :<"
+            )
+          )
         : null;
     if (debugprint)
       console.log(`Registering ${el.method.toUpperCase()} ${el.path}`);
@@ -139,7 +143,7 @@ async function route(app, express, { debugprint }) {
   if (debugprint) console.log("Adding public directory middleware");
   express.use(require("express").static(publicdir));
 
-  express.use(require("express").static(packagedir), "/packages")
+  express.use("/packages", require("express").static(packagedir));
 
   if (debugprint) console.log("Adding the error404-page");
   if (!app.config.e404page)
@@ -184,7 +188,8 @@ async function getPages(pagedir, debugprint) {
     \/ */
 async function getPubPages(publicpagedir, debugprint) {
   if (!existsSync(publicpagedir)) {
-    if (debugprint) console.log(redBright("No Pages for the renderengine found!"));
+    if (debugprint)
+      console.log(redBright("No Pages for the renderengine found!"));
     return [];
   }
 
