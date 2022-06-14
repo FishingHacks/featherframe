@@ -41,14 +41,8 @@ class VNode {
   constructor(tag, attrs = { events: {} }, ...childs) {
     let children = childs || [];
     attrs = attrs || { events: {} };
-    if (typeof tag == "function") {
-      let node = tag(attrs, children);
-      tag = "unknown";
-      children = node instanceof Array ? node : [node];
-      attrs = [];
-    } else {
-      children = children[0] instanceof Array ? children[0] : [children[0]];
-    }
+    children = children[0] instanceof Array ? children[0] : [children[0]];
+
     if (!attrs.events || !(attrs.events instanceof Array)) {
       attrs.events = {};
     }
@@ -79,14 +73,30 @@ class VNode {
     this.tag = tag;
   }
 
-  render() {
-    let element = document.createElement(this.tag);
+  async render(xmlns = "") {
+    if (typeof this.tag == "function")
+      this.#children = await this.tag(this.#attrs, this.#children);
+
+    this.#attrs.xmlns ? (xmlns = this.#attrs.xmlns) : null;
+
+    let element = null;
+
+    if (xmlns) {
+      element = document.createElementNS(
+        xmlns,
+        typeof this.tag == "function" ? "unknown" : this.tag
+      );
+    } else {
+      element = document.createElement(
+        typeof this.tag == "function" ? "unknown" : this.tag
+      );
+    }
 
     element.setAttribute("renderengine-el", "");
 
     let attrKeys = Object.keys(this.#attrs);
     attrKeys.forEach((key) => {
-      if (key != null && key != undefined && key != "")
+      if (key != null && key != undefined && key != "" && key != "xmlns");
         element.setAttribute(key, this.#attrs[key]);
     });
 
@@ -95,6 +105,7 @@ class VNode {
         this.events[ev](new HEvent(this, args[0], args))
       );
     });
+    if (!(this.#children instanceof Array)) this.#children = [this.#children];
     while (
       this.#children.reduce(
         (acc, el) => (el instanceof Array ? true : acc),
@@ -113,9 +124,11 @@ class VNode {
       });
     }
 
-    this.#children.forEach((node) => {
+    this.#children.forEach(async (node) => {
       element.appendChild(
-        node instanceof VNode ? node.render() : document.createTextNode(node)
+        node instanceof VNode
+          ? await node.render(xmlns)
+          : document.createTextNode(node)
       );
     });
 
@@ -218,7 +231,7 @@ class VDOM {
         );
       });
 
-      await new Promise(r=>setTimeout(r, 0)); // Bugfix for a weird problem, where it doesn't clear out the page when a new render event is caused immediately in useEffect
+      await new Promise((r) => setTimeout(r, 0)); // Bugfix for a weird problem, where it doesn't clear out the page when a new render event is caused immediately in useEffect
 
       effects = effects.map((el) => {
         if (typeof el.func == "function" && el.changed) {
@@ -244,12 +257,12 @@ class VDOM {
 
       let errel = document.createElement("div");
 
-        errel.classList.add("errel")
-        errel.setAttribute("renderengine-el", "");
+      errel.classList.add("errel");
+      errel.setAttribute("renderengine-el", "");
 
-        errel.style.color="#fff";
+      errel.style.color = "#fff";
 
-        document.body.style.backgroundColor="#24292f";
+      document.body.style.backgroundColor = "#24292f";
 
       let titleel = document.createElement("h1");
       titleel.textContent =
@@ -359,7 +372,7 @@ export function useState(stdval) {
   if (states[i] == null || states[i] == undefined) states[i] = stdval;
   let index = i;
   function setState(val) {
-    if(typeof val == "function") val = val(states[index]);
+    if (typeof val == "function") val = val(states[index]);
     states[index] = val;
     rerender();
   }
@@ -377,7 +390,7 @@ export function useIDState(id, stdval) {
   if (idstates[id] == null || idstates[id] == undefined) idstates[id] = stdval;
 
   function setState(val) {
-    if(typeof val == "function") val = val(idstates[id]);
+    if (typeof val == "function") val = val(idstates[id]);
     idstates[id] = val;
     rerender();
   }
@@ -462,7 +475,7 @@ function addArrowUpAtChar(c) {
 }
 
 /**
- * 
+ *
  * @param {(T, any)=>T} reducer get's called, when dispatch is called with the action and the current state
  * @param {T} initialValue the initial Value
  * @returns {[T, (any)=>void]} the State and the dispatch function
@@ -496,6 +509,9 @@ export function useContext(key) {
 }
 
 export function require(path) {
-  if(!path.startsWith("/")) path = "/"+path;
-  return import("/packages" + path);
+  if (!path.startsWith("/")) path = "/" + path;
+  path = "/packages" + path;
+  if (!path.endsWith(".js") && !path.endsWith(".mjs"))
+    path += (path.endsWith("/") ? "" : "/") + "index.js";
+  return import(path);
 }
