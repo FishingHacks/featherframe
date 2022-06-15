@@ -1,4 +1,4 @@
-const { loadApp } = require("./framework/index");
+const { loadApp } = require("./index");
 const express = require("express");
 const { join } = require("path")
 

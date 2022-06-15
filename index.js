@@ -1,1 +1,1 @@
-module.exports = require("./framework/index").loadApp;
+module.exports = { loadApp: require("./framework/index").loadApp };
