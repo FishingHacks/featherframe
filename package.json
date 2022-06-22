@@ -1,6 +1,6 @@
 {
   "name": "featherframe",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "",
   "bin": "bin/index.js",
   "main": "index.js",

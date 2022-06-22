@@ -60,3 +60,24 @@ Visit the [Wiki](https://www.github.com/FishingHacks/featherframe/wiki) to view 
 ```
 
 Thanks to RedCrafter07 for an unused Logo Design
+
+# Changelogs
+## 1.0.0
+- Routing
+- Render Engine
+- Error pages
+- Exception Pages
+- CLI
+
+## 1.1.0
+- Context API
+- NPM Integration
+
+## 1.2.0
+- XML Support
+- useState & useIDState overhaul
+Fixes:
+- Improperly rerender
+
+## 1.2.1
+Better Module Support
