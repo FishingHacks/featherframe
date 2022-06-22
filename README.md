@@ -17,7 +17,7 @@ Logo comes from [game-icons.net/lorc/feather](https://game-icons.net/1x1/lorc/fe
 
 # Documentation
 
-Visit the [Wiki](https://www.github.com/FishingHacks/featherframe/wiki) to view the full Documentation
+Visit the [Wiki](https://www.github.com/FishingHacks/featherframe/wiki) to view the full Documentation. **It also contains important security Informations.**
 
 # Authors
 
