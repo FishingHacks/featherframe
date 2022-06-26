@@ -116,17 +116,15 @@ async function route(app, express, { debugprint }) {
         : null;
     if (debugprint)
       console.log(`Registering ${el.method.toUpperCase()} ${el.path}`);
+      try {
+    const func = require(join(pagedir, `${el.path}.${el.method}.js`));
     express[el.method.toLowerCase()](
       el.path.replace(/index$/, ""),
       async (req, res, next) => {
         try {
-          orig = join(pagedir, `${el.path}.${el.method}.js`);
           await access(orig, R_OK | W_OK);
           try {
-            let oldpath = process.cwd();
-            process.chdir(app.path)
-            require(orig)(req, res, next);
-            process.chdir(oldpath);
+            func(req, res, next);
             return;
           } catch (e) {
             res.status(500).send("Error: Internal Server error");
@@ -141,6 +139,10 @@ async function route(app, express, { debugprint }) {
         }
       }
     );
+      }
+      catch (e) {
+        console.error(redBright('[ERROR] An error occurred whilst trying to register an endpoint:\n' + require('util').format(e)))
+      }
   });
 
   if (debugprint) console.log("Adding public directory middleware");
@@ -170,6 +172,7 @@ async function route(app, express, { debugprint }) {
   express.all("*", (req, res) =>
     res.headersSent ? null : res.status(404).send(e404page)
   );
+  process.chdir(app.path);
 }
 
 async function getPages(pagedir, debugprint) {
