@@ -123,7 +123,10 @@ async function route(app, express, { debugprint }) {
           orig = join(pagedir, `${el.path}.${el.method}.js`);
           await access(orig, R_OK | W_OK);
           try {
+            let oldpath = process.cwd();
+            process.chdir(app.path)
             require(orig)(req, res, next);
+            process.chdir(oldpath);
             return;
           } catch (e) {
             res.status(500).send("Error: Internal Server error");
