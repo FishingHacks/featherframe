@@ -15,6 +15,7 @@ const fs = require("fs");
 const { redBright } = require("chalk");
 
 const AVAILABLE_METHODS = [
+  "all",
   "checkout",
   "copy",
   "delete",
@@ -105,7 +106,7 @@ async function route(app, express, { debugprint }) {
     pages.includes(path) ? null : pages.push(path)
   );
 
-  pages.forEach((el) => {
+  pages.forEach(async (el) => {
     if (!AVAILABLE_METHODS.includes(el.method.toLowerCase()))
       return debugprint
         ? console.error(
@@ -117,28 +118,27 @@ async function route(app, express, { debugprint }) {
     if (debugprint)
       console.log(`Registering ${el.method.toUpperCase()} ${el.path}`);
       try {
-    const func = require(join(pagedir, `${el.path}.${el.method}.js`));
-    express[el.method.toLowerCase()](
-      el.path.replace(/index$/, ""),
-      async (req, res, next) => {
+        let func = (req,res,next)=>{}
         try {
           await access(orig, R_OK | W_OK);
-          try {
-            func(req, res, next);
-            return;
-          } catch (e) {
-            res.status(500).send("Error: Internal Server error");
-            if (debugprint) console.log("Error:", e);
-          }
+          func = require(join(pagedir, `${el.path}.${el.method}.js`));
         } catch {
-          res
-            .status(200)
-            .send(
-              app.html.replaceAll("%path", `/pages${el.path}.${el.method}.js`)
-            );
+          func = (req, res, next) => {
+            res.status(200).send(app.html.replaceAll("%path", `/App.js`));
+          }
         }
-      }
-    );
+        express[el.method.toLowerCase()](
+          el.path.replace(/index$/, ""),
+          async (req, res, next) => {
+            try {
+              func(req, res, next, req.params);
+              return;
+            } catch (e) {
+              res.status(500).send("Error: Internal Server error");
+              if (debugprint) console.log("Error:", e);
+            }
+          }
+        );
       }
       catch (e) {
         console.error(redBright('[ERROR] An error occurred whilst trying to register an endpoint:\n' + require('util').format(e)))
@@ -203,8 +203,7 @@ async function getPubPages(publicpagedir, debugprint) {
     .filter((path) => path.endsWith(".js"))
     .map((el) => el.replace(publicpagedir, "").replace(/\.js$/, ""));
   return paths.map((el) => {
-    let spltd = el.split(".");
-    return { method: spltd.pop(), path: spltd.join() };
+    return { method: "all", path: el };
   });
 }
 

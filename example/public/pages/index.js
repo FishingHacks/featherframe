@@ -1,6 +1,5 @@
 import {
   html,
-  render,
   useIDState,
   useRef,
   useEffect,
@@ -10,7 +9,7 @@ import {
   useContext,
 } from "/framework";
 
-render(async () => {
+export async function render() {
   let [count, setCount] = useIDState("counterone", 0);
   let [count2, setCount2] = useState(0);
   let old = useRef(0);
@@ -69,4 +68,4 @@ render(async () => {
       arr.map((el) => arr.map((el) => html`<p>${el}</p>`))
     }
   `;
-});
+}

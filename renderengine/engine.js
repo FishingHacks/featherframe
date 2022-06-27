@@ -225,11 +225,17 @@ class VDOM {
         );
       }
 
+      const error = false;
       childs.forEach(async (c) => {
-        this.#mnt.appendChild(
-          typeof c == "string" ? document.createTextNode(c) : await c.render()
-        );
+        try {
+          this.#mnt.appendChild(
+            typeof c == "string" ? document.createTextNode(c) : await c.render()
+          );
+        } catch (e) {
+          error = e;
+        }
       });
+      if (error) throw e;
 
       await new Promise((r) => setTimeout(r, 0)); // Bugfix for a weird problem, where it doesn't clear out the page when a new render event is caused immediately in useEffect
 
@@ -554,4 +560,13 @@ export function require(module) {
   if (!loadedModules[module])
     throw new Error("[ERR] module " + module + " wasn't yet loaded");
   return loadedModules[module];
+}
+
+export function reset() {
+  i = 0;
+  idstates = {};
+  ieffect = 0;
+  iref = 0;
+  effects = [];
+  states = [];
 }
