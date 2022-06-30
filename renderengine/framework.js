@@ -1,3 +1,5 @@
+const logEvents = feahterframeConfig.logEvents || false;
+
 export {
   h,
   rerender,
@@ -10,11 +12,23 @@ export {
   useReducer,
   createContext,
   useContext,
-  require,
-  loadModules,
 } from "./engine";
 import htm from "https://unpkg.com/htm?module";
-import { reset, h, render as r, rerender } from "./engine";
+import {
+  reset,
+  h,
+  render as r,
+  rerender,
+  useState,
+  useIDState,
+  setTitle,
+  getTitle,
+  useEffect,
+  useRef,
+  useReducer,
+  createContext,
+  useContext,
+} from "./engine";
 export function requireCSS(src) {
   let link = document.createElement("link");
   link.href = src;
@@ -161,4 +175,90 @@ export function redirect(url) {
 window.addEventListener("popstate", () => {
   reset();
   rerender();
+});
+
+function errorPromise(err) {
+  return new Promise((res, rej) => rej(err));
+}
+
+const frameworkObject = {
+  h,
+  rerender,
+  useState,
+  useIDState,
+  setTitle,
+  getTitle,
+  useEffect,
+  useRef,
+  useReducer,
+  createContext,
+  useContext,
+  App,
+  html: htm.bind(h),
+  render,
+  requireCSS,
+  requireScript,
+  matchpath,
+  redirect,
+  goto: (pathname) => {
+    redirect(new URL(location.origin + pathname));
+  },
+};
+
+export function goto(pathname) {
+  redirect(new URL(location.origin + pathname));
+}
+
+const loadedModules = {
+  framework: frameworkObject,
+  featherframe: frameworkObject
+};
+
+function loadModule(modulepath, modulename) {
+  if (typeof modulepath != "string")
+    return errorPromise("[ERR] module name " + modulepath + " is not a string");
+  modulename = modulepath;
+  if (!modulepath.startsWith("/")) modulepath = "/" + modulepath;
+  modulepath = "/packages" + modulepath;
+  if (!modulepath.endsWith(".js") && !modulepath.endsWith(".mjs"))
+    modulepath += (modulepath.endsWith("/") ? "" : "/") + "index.js";
+
+  return new Promise((r) => {
+    import(modulepath).then((exportedValues) => {
+      loadedModules[modulename] = exportedValues;
+      r();
+    });
+  });
+}
+
+export function loadModules(modules = []) {
+  if (logEvents) console.log("loading modules", modules);
+  let promises = modules.map((el) => loadModule(el));
+  return new Promise((res) => {
+    let unresolved = promises.length;
+    promises.forEach((el, i) => {
+      el.then((empty) => {
+        unresolved--;
+        if (unresolved < 1) res();
+      }).catch((err) => {
+        console.error(
+          "[ERR] Error while loading module " + modules[i] + ": " + err
+        );
+        unresolved--;
+        if (unresolved < 1) res();
+      });
+    });
+  });
+}
+
+export function require(module) {
+  if (logEvents) console.log("trying to laod module", module.toString());
+  if (!loadedModules[module])
+    throw new Error("[ERR] module " + module + " wasn't yet loaded");
+  return loadedModules[module];
+}
+
+Object.defineProperty(window, "require", {
+  value: require,
+  writable: false,
 });

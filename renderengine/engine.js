@@ -608,56 +608,6 @@ export function useContext(key) {
   return contexts[key];
 }
 
-function errorPromise(err) {
-  return new Promise((res, rej) => rej(err));
-}
-
-const loadedModules = {};
-
-function loadModule(modulepath, modulename) {
-  if (typeof modulepath != "string")
-    return errorPromise("[ERR] module name " + modulepath + " is not a string");
-  modulename = modulepath;
-  if (!modulepath.startsWith("/")) modulepath = "/" + modulepath;
-  modulepath = "/packages" + modulepath;
-  if (!modulepath.endsWith(".js") && !modulepath.endsWith(".mjs"))
-    modulepath += (modulepath.endsWith("/") ? "" : "/") + "index.js";
-
-  return new Promise((r) => {
-    import(modulepath).then((exportedValues) => {
-      loadedModules[modulename] = exportedValues;
-      r();
-    });
-  });
-}
-
-export function loadModules(modules = []) {
-  if (logEvents) console.log("loading modules", modules);
-  let promises = modules.map((el) => loadModule(el));
-  return new Promise((res) => {
-    let unresolved = promises.length;
-    promises.forEach((el, i) => {
-      el.then((empty) => {
-        unresolved--;
-        if (unresolved < 1) res();
-      }).catch((err) => {
-        console.error(
-          "[ERR] Error while loading module " + modules[i] + ": " + err
-        );
-        unresolved--;
-        if (unresolved < 1) res();
-      });
-    });
-  });
-}
-
-export function require(module) {
-  if (logEvents) console.log("trying to laod module", module.toString());
-  if (!loadedModules[module])
-    throw new Error("[ERR] module " + module + " wasn't yet loaded");
-  return loadedModules[module];
-}
-
 export function reset() {
   if (logEvents) console.log("resetting...");
   i = 0;

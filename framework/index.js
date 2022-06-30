@@ -33,10 +33,11 @@ let app;
  */
 async function loadApp(path, express, config={debugprint: false}) {
     app = new App(path);
-    await require("./router.js")(app, express, config);
+    await require("./router.js").route(app, express, config);
     return app;
 }
 
 module.exports = {
-    loadApp
+    loadApp,
+    build: require("./router").build
 }

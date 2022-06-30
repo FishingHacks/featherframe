@@ -1,12 +1,18 @@
 const { application } = require("express");
 const {
   existsSync,
-  readdirSync,
   lstatSync,
   constants: { R_OK, W_OK },
 } = require("fs");
 const { join } = require("path");
-const { access, readFile, lstat } = require("fs/promises");
+const { access, readFile, lstat, readdir } = require("fs/promises");
+const { parseCookies } = require("./modules/parsers");
+const { inspect } = require("util");
+
+function waitForValueToReach0(pages, r) {
+  if (pages.v == 0) return r();
+  setTimeout(() => waitForValueToReach0(pages, r), 100);
+}
 
 process.chdir(join(module.path, "../"));
 
@@ -41,29 +47,133 @@ const AVAILABLE_METHODS = [
   "unsubscribe",
 ];
 
+/**
+ *
+ * @param {string} path path to the application
+ * @param {{debugprint?: bool}} param1 config
+ * @returns {{middlewarefiles: Array<string>, backendpages: Array<{origin: string, path: string, method: string, regex: string}>, frontendpages: Array<{regex: string, path: string}>}}
+ */
+async function build(path, { debugprint }) {
+  let middlewaredir = join(path, "middleware");
+  let pagedir = join(path, "pages");
+  let publicpagedir = join(path, "public", "pages");
+
+  // get middleware files
+  const middlewarefiles = [];
+  if (existsSync(middlewaredir) && isDir(middlewaredir)) {
+    if (debugprint) console.log("Collecting middleware packages . . . .");
+    let middlewarepkgs = [];
+    await readdir(middlewaredir).then((data) =>
+      data.forEach((el) => {
+        if (!el.endsWith(".js")) return;
+        if (!isFile(join(middlewaredir, el))) return;
+        middlewarepkgs.push(join(middlewaredir, el));
+      })
+    );
+    for (const i in middlewarepkgs) {
+      middlewarefiles.push(middlewarepkgs[i]);
+    }
+  } else {
+    if (debugprint) console.log(redBright("No Middleware directory"));
+  }
+
+  console.log("Collecting pages...");
+
+  const backendpages = [];
+  const frontendpages = [];
+
+  let pages = await getPages(pagedir, debugprint);
+
+  (await getPubPages(publicpagedir, debugprint)).forEach((path) =>
+    pages.includes(path) ? null : pages.push(path)
+  );
+
+  const pagesLeft = { v: pages.length };
+
+  pages.forEach(async (el) => {
+    console.log("Collecting " + el.method.toUpperCase() + " " + el.path);
+    const orig = join(path, "/pages/", `${el.path}.${el.method}.js`);
+    try {
+      await access(orig, R_OK);
+      backendpages.push({
+        origin: orig,
+        path: el.path,
+        method: el.method.toLowerCase(),
+        regex: Object.values(el.path)
+          .map((el) =>
+            Object.values("*.(){}/\\[]+?").includes(el) ? "\\" + el : el
+          )
+          .join("")
+          .replaceAll(/:[^/]+/g, "[^/]+"),
+      });
+    } catch (e) {
+      frontendpages.push({
+        path: el.path,
+        regex: el.path.match(/^\/index +$/)
+          ? "^\\/$"
+          : Object.values(el.path.replace(/index$/g, ""))
+              .map((el) =>
+                Object.values("*.(){}/\\[]+?").includes(el) ? "\\" + el : el
+              )
+              .join("")
+              .replaceAll(/:[^/]+/g, "[^/]+"),
+      });
+    }
+    pagesLeft.v--;
+  });
+
+  await new Promise((r) => waitForValueToReach0(pagesLeft, r));
+
+  return {
+    backendpages,
+    frontendpages,
+    middlewarefiles,
+  };
+}
+
 // at build, comment out or remove, as it is only for types
 // const {App} = require("./types");
 /**
  * @param {App} app
  * @param {application} express
- * @param {{debugprint?: bool}} pos1
+ * @param {{debugprint?: bool}} param1 config
  */
 async function route(app, express, { debugprint }) {
   const path = app.path;
-  let middlewaredir = join(path, "middleware");
-  let pagedir = join(path, "pages");
-  let publicpagedir = join(path, "public", "pages");
   let publicdir = join(path, "public");
   let packagedir = join(path, "node_modules");
+
+  let pkg = {};
+
+  if (existsSync(join(path, ".build.json"))) {
+    if (debugprint) console.log("Buildfile found");
+    pkg = require(join(path, ".build.json"));
+  } else {
+    if (debugprint) console.log("Buildfile not found! Building Project...");
+    pkg = await build(app.path, { debugprint });
+    if (debugprint) console.log("Project Build")
+  }
 
   // server renderengine first, so that nothing breaks (hopefully)
   const framework_content = await readFile("renderengine/framework.js");
   const engine_content = (await readFile("renderengine/engine.js")).toString();
 
-  const font_ttf_content = (await readFile("framework/font/font.ttf")).toString();
-  const font_css_content = (await readFile("framework/font/font.css")).toString();
+  const font_ttf_content = (
+    await readFile("framework/font/font.ttf")
+  ).toString();
+  const font_css_content = (
+    await readFile("framework/font/font.css")
+  ).toString();
 
   const stdico_content = await readFile("framework/stdlogo.ico");
+
+  express.use((req, res, next) => {
+    if (req.headers.cookie) {
+      req.cookies = parseCookies(req.headers.cookie, false);
+      req.serializedCookies = parseCookies(req.headers.cookie, false);
+    }
+    next();
+  });
 
   express.get("/__featherframe/font/font.ttf", (req, res) => {
     res.set({ "Content-Type": "font/ttf" });
@@ -71,9 +181,8 @@ async function route(app, express, { debugprint }) {
   });
   express.get("/__featherframe/font/font.css", (req, res) => {
     res.set({ "Content-Type": "text/css; charset=UTF-8" });
-    res.send(font_css_content)
-  }
-  );
+    res.send(font_css_content);
+  });
 
   // display the standard favicon, when none found
   if (
@@ -99,28 +208,17 @@ async function route(app, express, { debugprint }) {
     return debugprint
       ? console.error(redBright("No public directory found!"))
       : null;
-  if (existsSync(middlewaredir) && isDir(middlewaredir)) {
-    if (debugprint) console.log("Collecting middleware packages . . . .");
-    let middlewarepkgs = [];
-    readdirSync(middlewaredir).forEach((el) => {
-      if (!el.endsWith(".js")) return;
-      if (!isFile(join(middlewaredir, el))) return;
-      middlewarepkgs.push(join(middlewaredir, el));
-    });
-    if (debugprint) console.log("Registering middleware packages . . . .");
-    middlewarepkgs.forEach((el) => express.use(require(el)));
-  } else {
-    if (debugprint) console.log(redBright("No Middleware directory"));
-  }
 
-  let pages = await getPages(pagedir, debugprint);
+  for (const i in pkg.middlewarefiles)
+    express.use(require(pkg.middlewarefiles[i]));
 
-  (await getPubPages(publicpagedir, debugprint)).forEach((path) =>
-    pages.includes(path) ? null : pages.push(path)
-  );
+  const BACKEND_PGS = pkg.backendpages.map((el) => el.regex);
+  const FRONTEND_PGS = pkg.frontendpages;
 
-  const BACKEND_PGS = [];
-  const FRONTEND_PGS = [];
+  express.get("/__featherframe/loader", (req, res) => {
+    res.set({ "Content-Type": "application/javascript; charset=UTF-8" });
+    res.send('import "/framework";\nimport "/App.js";');
+  });
 
   express.get("/__featherframe/bckndpgs", (req, res) => res.json(BACKEND_PGS));
   express.get("/__featherframe/frndpgs", (req, res) => res.json(FRONTEND_PGS));
@@ -161,82 +259,60 @@ async function route(app, express, { debugprint }) {
     }
   });
 
-  let pagesLeft = { v: pages.length };
+  for (const i in pkg.backendpages) {
+    const el = pkg.backendpages[i];
 
-  pages.forEach(async (el) => {
-    if (!AVAILABLE_METHODS.includes(el.method.toLowerCase()))
-      return debugprint
+    if (!AVAILABLE_METHODS.includes(el.method))
+      debugprint
         ? console.error(
             redBright(
               "The method " + el.method + " is not a valid HTTP method :<"
             )
           )
         : null;
-    if (debugprint)
-      console.log(`Registering ${el.method.toUpperCase()} ${el.path} `);
-    try {
-      let func = (req, res, next) => {};
-      try {
-        const orig = join(app.path, "/pages/", `${el.path}.${el.method}.js`);
-        await access(orig, R_OK | W_OK);
-        BACKEND_PGS.push(
-          Object.values(el.path)
-            .map((el) =>
-              Object.values("*.(){}/\\[]+?").includes(el) ? "\\" + el : el
-            )
-            .join("")
-            .replaceAll(/:[^/]+/g, "[^/]+")
-        );
-        func = require(join(pagedir, `${el.path}.${el.method}.js`));
-      } catch {
-        if (el.path == "/index" || el.path == "index")
-          FRONTEND_PGS.push({
-            regex: "/",
-            path: "index",
-          });
-        else
-          FRONTEND_PGS.push({
-            regex: Object.values(el.path)
-              .map((el) =>
-                Object.values("*.(){}/\\[]+?").includes(el) ? "\\" + el : el
-              )
-              .join("")
-              .replaceAll(/:[^/]+/g, "[^/]+"),
-            path: el.path,
-          });
-        func = (req, res, next) => {
-          res.status(200).send(app.html.replaceAll("%path", `/App.js`).replace("%style", "@font@font-face {\n  font-family: Poppins;\n  src: url(/__featherframe/font/font.ttf) format('truetype'),\n}"));
-        };
-      }
+    else {
+      if (debugprint)
+        console.log(`Registering ${el.method.toUpperCase()} ${el.path} `);
+      const func = require(el.origin);
       express[el.method.toLowerCase()](
-        el.path.replace(/index$/, ""),
-        async (req, res, next) => {
+        el.path,
+        async function (req, res, next, ...args) {
           try {
-            func(req, res, next, req.params);
-            return;
+            func(req, res, next, ...args);
           } catch (e) {
-            res.status(500).send("Error: Internal Server error");
-            if (debugprint) console.log("Error:", e);
+            console.error(redBright("Error: " + inspect(e)));
+            return res.status(500).send("Error: Internal Server Error");
           }
         }
       );
-      pagesLeft.v--;
-    } catch (e) {
-      console.error(
-        redBright(
-          "[ERROR] An error occurred whilst trying to register an endpoint:\n" +
-            require("util").format(e)
-        )
-      );
     }
-  });
-
-  // Wait until all pages are registered
-  function waitForValueToReach0(pages, r) {
-    if (pages.v == 0) return r();
-    setTimeout(() => waitForValueToReach0(pages, r), 100);
   }
-  await new Promise((r) => waitForValueToReach0(pagesLeft, r));
+
+  for (const i in pkg.frontendpages) {
+    const el = pkg.frontendpages[i];
+    const expressPath = el.path.replace(/index$/g, "");
+    const func = function (req, res, next) {
+      res
+        .status(200)
+        .send(
+          app.html
+            .replaceAll("%path", `/__featherframe/loader`)
+            .replace(
+              "%style",
+              "@font@font-face {\n  font-family: Poppins;\n  src: url(/__featherframe/font/font.ttf) format('truetype'),\n}"
+            )
+        );
+    };
+    console.log(`Registering ALL ${expressPath}`);
+    express.all(expressPath, function (req, res, next) {
+      try {
+        func(req, res, next);
+      } catch (e) {
+        console.error(redBright("Error: " + inspect(e)));
+        res.status(500).send("Error: Internal Server Error");
+      }
+    });
+  }
 
   if (debugprint) console.log("Adding public directory middleware");
   express.use(require("express").static(publicdir));
@@ -341,4 +417,4 @@ function isFile(path) {
   return lstatSync(path).isFile();
 }
 
-module.exports = route;
+module.exports = { route, build };
