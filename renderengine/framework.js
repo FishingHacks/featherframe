@@ -56,19 +56,47 @@ export function matchpath(path, pathname) {
   }
 }
 
+const BACKEND_PGS = [];
+const FRONTEND_PGS = [];
+
+fetch(location.origin + "/__featherframe/bckndpgs")
+  .then((data) => data.json())
+  .then((arr) =>
+    arr instanceof Array ? arr.forEach((el) => BACKEND_PGS.push(el)) : null
+  );
+
 const loadedSites = {};
 
 export async function App() {
+  if (FRONTEND_PGS.length < 1)
+    await fetch(location.origin + "/__featherframe/frndpgs")
+      .then((data) => data.json())
+      .then((arr) =>
+        arr instanceof Array
+          ? arr.forEach((el) =>
+              el.regex && el.path ? FRONTEND_PGS.push(el) : null
+            )
+          : null
+      );
   try {
     let app = { render: () => [] };
     if (!!loadedSites[location.pathname]) app = loadedSites[location.pathname];
     else {
-      app = await import(
-        location.origin +
-          "/pages" +
-          (location.pathname == "/" ? "/index" : location.pathname) +
-          ".js"
-      );
+      let importPath = location.origin + "/pages/";
+      for (const i in FRONTEND_PGS) {
+        if (!isNaN(Number(i))) {
+          const el = FRONTEND_PGS[i];
+          if (
+            new RegExp(el.regex).exec(location.pathname)?.join("") ==
+            location.pathname
+          ) {
+            importPath += el.path + ".js";
+            break;
+          }
+        }
+      }
+      importPath = importPath.replaceAll(/\/+/g, "/");
+      app = await import(importPath);
     }
     loadedSites[location.pathname] = app;
     if (app.render && typeof app.render == "function") {
@@ -78,33 +106,57 @@ export async function App() {
         console.error("Error while rendering the app", e);
         return [];
       }
-    } else return [];
-  } catch {
-    return [];
+    } else return html`Site exports no render function`;
+  } catch (e) {
+    console.log(e);
+    return html`<p>An Error occured: ${e.toString()}</p>`;
   }
 }
 
 window.addEventListener("click", (e) => {
-  e.preventDefault();
-  if (!e.target.href) return;
-  if (e.target.target == "_blank") return;
-  if (e.ctrlKey) return;
+  if (!e.target.href) return false;
+  if (e.target.target == "_blank") return false;
+  if (e.ctrlKey) return false;
   try {
     const url = new URL(e.target.href);
-    if (url.origin != location.origin) return;
-  } catch {}
+    if (url.origin != location.origin) return false;
+    if (
+      BACKEND_PGS.map(
+        (el) => new RegExp(el).exec(url.pathname)?.join("") == url.pathname
+      ).includes(true)
+    )
+      return false;
+  } catch (e) {
+    console.error(e);
+  }
   let uri = undefined;
   try {
     uri = new URL(e.target.href);
   } catch {
-    return;
+    return false;
   }
   console.log("SPA Action", uri.href);
   e.preventDefault();
+
   history.pushState(uri.href, uri.href, uri.href);
   reset();
   rerender();
 });
+
+export function redirect(url) {
+  try {
+    let uri = new URL(url);
+    if (window.location.origin != uri.origin)
+      return (window.location.href = uri.href);
+    console.log("SPA Action", uri.href);
+    history.pushState(uri.href, uri.href, uri.href);
+    reset();
+    rerender();
+    return uri.href;
+  } catch (e) {
+    return false;
+  }
+}
 
 window.addEventListener("popstate", () => {
   reset();

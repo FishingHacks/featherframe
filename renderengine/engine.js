@@ -1,36 +1,27 @@
-class HEvent {
-  #VNode;
-  #event;
-  #time;
-  #args;
-  #utime;
-  constructor(vnode, event, args) {
-    this.#utime = Date.now();
-    this.#time = new Date();
-    this.#VNode = vnode;
-    this.#event = event;
-    this.#args = args;
-  }
+function expandArray(childs) {
+  childs = childs instanceof Array ? childs : [childs];
 
-  get time() {
-    return this.#time;
+  while (
+    childs.reduce((acc, val) => (val instanceof Array ? true : acc), false)
+  ) {
+    let newchilds = childs;
+    childs = [];
+
+    newchilds.forEach((el) =>
+      el instanceof Array ? childs.push(...el) : childs.push(el)
+    );
   }
-  get utime() {
-    return this.#utime;
-  }
-  get unixtime() {
-    return this.#utime;
-  }
-  get event() {
-    return this.#event;
-  }
-  get VNode() {
-    return this.#VNode;
-  }
-  get args() {
-    return this.#args;
-  }
+  return childs;
 }
+
+async function awaitForeach(arr, cb) {
+  for (const i in arr) {
+    if (!isNaN(i)) await cb(arr[i], Number(i), arr);
+  }
+  return;
+}
+
+const logEvents = feahterframeConfig.logEvents || false;
 
 class VNode {
   #children = [];
@@ -62,81 +53,80 @@ class VNode {
     if (typeof this.tag != "string" && this.tag == "")
       throw new Error("Attribute has to be a String and not empty.");
 
-    attrs = {};
-    attrKeys.forEach((el, i) =>
-      el != null ? (attrs[el] = attrVals[i]) : null
-    );
+    if (typeof tag != "function") {
+      attrs = {};
+      attrKeys.forEach((el, i) =>
+        el != null ? (attrs[el] = attrVals[i]) : null
+      );
+    }
 
     this.#children = children;
     this.#attrs = attrs;
     this.events = events;
     this.tag = tag;
+    if (logEvents) console.log("created VNode", this);
   }
 
   async render(xmlns = "") {
-    if (typeof this.tag == "function")
-      this.#children = await this.tag(this.#attrs, this.#children);
+    if (logEvents) console.log("rendering VNode", this);
+    try {
+      if (typeof this.tag == "function")
+        this.#children = await this.tag(this.#attrs, this.#children);
 
-    this.#attrs.xmlns ? (xmlns = this.#attrs.xmlns) : null;
+      this.#attrs.xmlns ? (xmlns = this.#attrs.xmlns) : null;
 
-    let element = null;
+      let element = null;
 
-    if (xmlns) {
-      element = document.createElementNS(
-        xmlns,
-        typeof this.tag == "function" ? "unknown" : this.tag
-      );
-    } else {
-      element = document.createElement(
-        typeof this.tag == "function" ? "unknown" : this.tag
-      );
-    }
+      if (xmlns) {
+        element = document.createElementNS(
+          xmlns,
+          typeof this.tag == "function" ? "unknown" : this.tag
+        );
+      } else {
+        element = document.createElement(
+          typeof this.tag == "function" ? "unknown" : this.tag
+        );
+      }
 
-    element.setAttribute("renderengine-el", "");
+      element.setAttribute("renderengine-el", "");
 
-    let attrKeys = Object.keys(this.#attrs);
-    attrKeys.forEach((key) => {
-      if (key != null && key != undefined && key != "" && key != "xmlns");
-      element.setAttribute(key, this.#attrs[key]);
-    });
-
-    Object.keys(this.events).forEach((ev) => {
-      element.addEventListener(ev, (...args) =>
-        this.events[ev](new HEvent(this, args[0], args))
-      );
-    });
-    if (!(this.#children instanceof Array)) this.#children = [this.#children];
-    while (
-      this.#children.reduce(
-        (acc, el) => (el instanceof Array ? true : acc),
-        false
-      )
-    ) {
-      let chc = this.#children.map((el) => el);
-      this.#children = [];
-
-      chc.forEach((el) => {
-        if (el instanceof Array) {
-          el.forEach((el) => this.#children.push(el));
-        } else {
-          this.#children.push(el);
-        }
+      let attrKeys = Object.keys(this.#attrs);
+      attrKeys.forEach((key) => {
+        if (key != null && key != undefined && key != "" && key != "xmlns");
+        element.setAttribute(key, this.#attrs[key]);
       });
-    }
 
-    this.#children.forEach(async (node) => {
-      element.appendChild(
-        node instanceof VNode
-          ? await node.render(xmlns)
-          : document.createTextNode(node)
+      Object.keys(this.events).forEach((ev) => {
+        element.addEventListener(ev, (...args) => {
+          typeof this.events[ev] != "function"
+            ? console.error(
+                "Value for event." + ev + " or on" + ev + " is not a function"
+              )
+            : this.events[ev](...args);
+        });
+      });
+
+      this.#children = expandArray(this.#children);
+
+      await awaitForeach(this.#children, async (node) => {
+        element.appendChild(
+          node instanceof VNode
+            ? await node.render(xmlns)
+            : document.createTextNode(node)
+        );
+      });
+
+      if (typeof element.getAttribute("ref") == "string") {
+        this.#attrs.ref ? (this.#attrs.ref.current = element) : null;
+        element.removeAttribute("ref");
+      }
+      return element;
+    } catch (e) {
+      if (e.message.substr(0, 30) == "Error whilst trying to render ") throw e;
+      throw new Error(
+        "Error whilst trying to render " + this.tag + ": " + e.message
       );
-    });
-
-    if (typeof element.getAttribute("ref") == "string") {
-      this.#attrs.ref ? (this.#attrs.ref.current = element) : null;
-      element.removeAttribute("ref");
     }
-    return element;
   }
 
   addChild(children) {
@@ -202,43 +192,36 @@ class VDOM {
   }
 
   async render() {
+    if (logEvents) console.log("rendering...");
     i = 0;
     ieffect = 0;
     iref = 0;
 
-    Object.values(this.#mnt.children).forEach((c) => {
-      if (c.getAttribute("renderengine-el") != null) this.#mnt.removeChild(c);
-    });
-
     try {
       let childs = await this.#children(this.#state);
-      childs = childs instanceof Array ? childs : [childs];
+      childs = expandArray(childs);
 
-      while (
-        childs.reduce((acc, val) => (val instanceof Array ? true : acc), false)
-      ) {
-        let newchilds = childs;
-        childs = [];
+      const left = { v: childs.length };
 
-        newchilds.forEach((el) =>
-          el instanceof Array ? childs.push(...el) : childs.push(el)
-        );
-      }
-
-      const error = false;
-      childs.forEach(async (c) => {
+      let error = false;
+      const children_to_append = [];
+      await awaitForeach(childs, async (c) => {
         try {
-          this.#mnt.appendChild(
+          children_to_append.push(
             typeof c == "string" ? document.createTextNode(c) : await c.render()
           );
         } catch (e) {
           error = e;
         }
       });
-      if (error) throw e;
 
-      await new Promise((r) => setTimeout(r, 0)); // Bugfix for a weird problem, where it doesn't clear out the page when a new render event is caused immediately in useEffect
-
+      if (logEvents) console.log("removing old elements");
+      Object.values(this.#mnt.children).forEach((c) => {
+        if (c.getAttribute("renderengine-el") != null) this.#mnt.removeChild(c);
+      });
+      if (error) throw error;
+      children_to_append.forEach((el) => this.#mnt.append(el));
+      if (logEvents) console.log("Adding new Elements");
       effects = effects.map((el) => {
         if (typeof el.func == "function" && el.changed) {
           el.ret = el.func();
@@ -246,6 +229,7 @@ class VDOM {
         }
         return el;
       });
+      if (logEvents) console.log("render completed");
     } catch (e) {
       console.error(
         "An error occured while trying to render the application",
@@ -263,12 +247,18 @@ class VDOM {
 
       let errel = document.createElement("div");
 
+      const style = document.createElement("style");
+      style.textContent =
+        "@font-face {\nfont-family: Poppins;src: url('/__featherframe/font/font.ttf') format('truetype'),}\n.errel,\n.errel > * {\n    font-family: 'Poppins', sans-serif;\n}";
+
+      errel.append(style);
+
       errel.classList.add("errel");
       errel.setAttribute("renderengine-el", "");
 
       errel.style.color = "#fff";
-
-      document.body.style.backgroundColor = "#24292f";
+      errel.style.padding = "50px";
+      errel.style.background = "#24292f";
 
       let titleel = document.createElement("h1");
       titleel.textContent =
@@ -280,12 +270,63 @@ class VDOM {
         "style",
         "width: max-content; font-family: monospace; border: 3px white solid; border-radius: 15px; padding: 10px; background: rgba(168, 91, 91, 0.467);"
       );
-      stackel.innerHTML = stacktrace
+
+      stacktrace = stacktrace
+        .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
         .replaceAll(" ", "&nbsp;")
         .replaceAll('"', "&quot;")
         .replaceAll("\n", "<br />");
+
+      const expression =
+        /(https?:\/\/[^\s]+\/[^\s)]{2,}|www\.[^\s]+\.[^\s)]{2,})/gi;
+      const matches = expandArray(
+        stacktrace.split("\n").map((el) => el.match(expression))
+      );
+      let results = [];
+
+      for (const match in matches) {
+        if (matches[match] != null) {
+          let result = {};
+          result["link"] = matches[match];
+          result["startsAt"] = stacktrace.indexOf(matches[match]);
+          result["endsAt"] =
+            stacktrace.indexOf(matches[match]) + matches[match].length;
+          results.push(result);
+        }
+      }
+
+      let lastVal = { endsAt: 0 };
+
+      stacktrace = results
+        .map((el) => {
+          const newResult = { ...el };
+          newResult.oldlink = newResult.link;
+          let _link = newResult.link.split(":");
+          newResult.char = _link.pop() || 0;
+          newResult.line = _link.pop() || 1;
+          newResult.link = _link.join(":");
+          newResult.stacktrace = stacktrace.substring(
+            lastVal.endsAt,
+            newResult.endsAt
+          );
+          const url = new URL(newResult.link);
+          newResult.stacktrace = newResult.stacktrace.replaceAll(
+            newResult.oldlink,
+            `<a style="color: #999;decorations: none;" href="${
+              url.origin + "/__featherframe/preview?url=" + url.pathname
+            }" target="_blank">${
+              newResult.link.split("/")[newResult.link.split("/").length - 1]
+            }</a>`
+          );
+          lastVal = newResult;
+          return newResult;
+        })
+        .map((el) => el.stacktrace)
+        .join("");
+
+      stackel.innerHTML = stacktrace + ")";
       errel.append(stackel);
 
       let contents = await await fetch(f).then((el) => el.text());
@@ -303,11 +344,9 @@ class VDOM {
           `<span style="background-color:rgba(95, 84, 84, 0.333);color:#ddd;">${
             l - 2 + i
           }${
-            (l - 2 + i).toString().length == l
-              ? "&nbsp;"
-              : (l - 2 + i).toString().length < l
+            (l - 2 + i).toString().length == l.toString().length
               ? "&nbsp;&nbsp;"
-              : ""
+              : "&nbsp;"
           }|&nbsp;</span>${el
             .replaceAll(" ", "&nbsp;")
             .replaceAll("<", "&lt;")
@@ -330,6 +369,41 @@ class VDOM {
       codep.innerHTML = contents.join("\n").replaceAll("\n", "<br />");
       codep.setAttribute("style", "font-family: monospace;");
       errel.append(codep);
+
+      const rerenderBtn = document.createElement("button");
+      rerenderBtn.textContent = "Rerender";
+      rerenderBtn.onclick = rerender;
+
+      rerenderBtn.style.padding = "5px";
+      rerenderBtn.style.border = "0px solid green";
+      rerenderBtn.style.borderRadius = "10px";
+      rerenderBtn.style.cursor = "pointer";
+      rerenderBtn.style.background = "green";
+      rerenderBtn.style.color = "#fff";
+
+      errel.append(rerenderBtn);
+
+      const resetBtn = document.createElement("button");
+      resetBtn.textContent = "Reset";
+      resetBtn.onclick = () => {
+        reset();
+        rerender();
+      };
+
+      resetBtn.style.marginLeft = "7px";
+      resetBtn.style.padding = "5px";
+      resetBtn.style.border = "0px solid red";
+      resetBtn.style.borderRadius = "10px";
+      resetBtn.style.cursor = "pointer";
+      resetBtn.style.background = "red";
+      resetBtn.style.color = "#fff";
+
+      errel.append(resetBtn);
+
+      if (logEvents) console.log("removing old elements");
+      Object.values(this.#mnt.children).forEach((c) => {
+        if (c.getAttribute("renderengine-el") != null) this.#mnt.removeChild(c);
+      });
 
       this.#mnt.appendChild(errel);
     }
@@ -375,6 +449,7 @@ let idstates = {};
  * @returns {[T, (val: T)=>void]}
  */
 export function useState(stdval) {
+  if (logEvents) console.log("using state#" + i.toString());
   if (states[i] == null || states[i] == undefined) states[i] = stdval;
   let index = i;
   function setState(val) {
@@ -393,6 +468,7 @@ export function useState(stdval) {
  * @returns {[T, (val: T)=>void]}
  */
 export function useIDState(id, stdval) {
+  if (logEvents) console.log("using State with id", id);
   if (idstates[id] == null || idstates[id] == undefined) idstates[id] = stdval;
 
   function setState(val) {
@@ -434,6 +510,7 @@ let effects = [];
 let ieffect = 0;
 
 export function useEffect(func, to_change) {
+  if (logEvents) console.log("using Effect");
   if (effects[ieffect] == null || effects[ieffect] == undefined) {
     effects[ieffect] = {
       func: func,
@@ -442,6 +519,19 @@ export function useEffect(func, to_change) {
       changed: true,
     };
   } else {
+    if (
+      effects[ieffect].lastchange instanceof Array &&
+      to_change instanceof Array
+    ) {
+      const is_eq = true;
+      effects[ieffect].lastchange.forEach((el, i) => {
+        if (to_change[i] != el) is_eq = false;
+      });
+      to_change.forEach((el, i) => {
+        if (effects[ieffect].lastchange[i] != el) is_eq = false;
+      });
+      if (is_eq) effects[ieffect].lastchange = to_change;
+    }
     if (
       effects[ieffect].lastchange != null &&
       effects[ieffect].lastchange != undefined &&
@@ -461,6 +551,7 @@ const refs = [];
 let iref = 0;
 
 export function useRef(stdobj) {
+  if (logEvents) console.log("using Reference");
   if (refs[iref] == null || refs[iref] == undefined) {
     refs[iref] = {
       current: stdobj,
@@ -487,6 +578,7 @@ function addArrowUpAtChar(c) {
  * @returns {[T, (any)=>void]} the State and the dispatch function
  */
 export function useReducer(reducer, initialValue) {
+  if (logEvents) console.log("new reducer created with value", initialValue);
   const [state, setState] = useState(initialValue);
 
   function dispatch(action) {
@@ -503,6 +595,7 @@ const contexts = {};
  * @param {string} key the key of the context
  */
 export function createContext(el, key) {
+  if (logEvents) console.log("Creating context", key, "with", el);
   contexts[key] = el;
 }
 
@@ -511,6 +604,7 @@ export function createContext(el, key) {
  * @returns {any} the value set for the context
  */
 export function useContext(key) {
+  if (logEvents) console.log("using context", key);
   return contexts[key];
 }
 
@@ -538,6 +632,7 @@ function loadModule(modulepath, modulename) {
 }
 
 export function loadModules(modules = []) {
+  if (logEvents) console.log("loading modules", modules);
   let promises = modules.map((el) => loadModule(el));
   return new Promise((res) => {
     let unresolved = promises.length;
@@ -557,12 +652,14 @@ export function loadModules(modules = []) {
 }
 
 export function require(module) {
+  if (logEvents) console.log("trying to laod module", module.toString());
   if (!loadedModules[module])
     throw new Error("[ERR] module " + module + " wasn't yet loaded");
   return loadedModules[module];
 }
 
 export function reset() {
+  if (logEvents) console.log("resetting...");
   i = 0;
   idstates = {};
   ieffect = 0;
