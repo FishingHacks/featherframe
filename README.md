@@ -15,6 +15,9 @@ Featherframe is a simple, lightweight and easy-to-understand solution for buildi
 
 Logo comes from [game-icons.net/lorc/feather](https://game-icons.net/1x1/lorc/feather.html) and was made by [Lorc](https://lorcblog.blogspot.com/)
 
+# Recommended VSCode Extensions
+[lit-html](https://marketplace.visualstudio.com/items?itemName=bierner.lit-html)
+	
 # Documentation
 
 Visit the [Wiki](https://www.github.com/FishingHacks/featherframe/wiki) to view the full Documentation. **It also contains important security Informations.**
@@ -81,3 +84,11 @@ Fixes:
 
 ## 1.2.1
 Better Module Support
+
+## 1.2.2
+Bugfixes:
+- CWD is set to installing Directory, not the current application directory
+- CWD is set to installing Directory, when used outside of blocking code (Promises, Certain Callbacks like setTimeout)
+
+## 1.3.0
+Additions: SPA Support
