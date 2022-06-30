@@ -46,14 +46,14 @@ Visit the [Wiki](https://www.github.com/FishingHacks/featherframe/wiki) to view 
 "featherframecreatepage": {
 	"prefix": "ffcreatepage",
 	"body": [
-		"import { html, render } from \"/framework\"",
+		"const { html } = require(\"feahterframe\");",
 		"",
-		"render(()=>{",
-		"$0",
+		"export async function render() {",
+		"",
 		"return html`",
-		"",
+		"$1",
 		"`",
-		"});"
+		"}"
 	],
 	"description": "Create A featherframe Page boilerplate"
 }
