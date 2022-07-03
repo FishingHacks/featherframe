@@ -1,3 +1,14 @@
+export function getFuncName(func) {
+  const funcRegex =
+    /^((export +)?(async +)?function) *([a-zA-Z_$]+) *\(([^),]+(,[^),])*)*\) *{/g;
+  let funcexec = funcRegex.exec("" + func);
+  if (!funcexec) funcexec = funcRegex.exec("" + func);
+  if (!funcexec) funcexec = funcRegex.exec("" + func);
+  if (!funcexec) funcexec = funcRegex.exec("" + func);
+
+  return funcexec && funcexec[4] ? funcexec[4] : null;
+}
+
 function expandArray(childs) {
   childs = childs instanceof Array ? childs : [childs];
 
@@ -28,11 +39,13 @@ class VNode {
   #attrs = [];
   events = [];
   tag = "";
+  #name = "anonymous";
 
   constructor(tag, attrs = { events: {} }, ...childs) {
     let children = childs || [];
     attrs = attrs || { events: {} };
     children = children[0] instanceof Array ? children[0] : [children[0]];
+    this.#name = typeof tag == "string" ? tag : getFuncName(tag);
 
     if (!attrs.events || !(attrs.events instanceof Array)) {
       attrs.events = {};
@@ -65,6 +78,28 @@ class VNode {
     this.events = events;
     this.tag = tag;
     if (logEvents) console.log("created VNode", this);
+  }
+
+  getDevtoolsObject() {
+    return {
+      title: `<${this.#name} />`,
+      value: [
+        {
+          title: "children",
+          value: this.#children.map((el) =>
+            el instanceof VNode ? el.getDevtoolsObject() : el.toString()
+          ),
+        },
+        {
+          title: "attributes",
+          value: this.attributes,
+        },
+        {
+          title: "events",
+          value: this.events,
+        },
+      ],
+    };
   }
 
   async render(xmlns = "") {
@@ -191,15 +226,23 @@ class VDOM {
     this.render();
   }
 
+  get children() {
+    return this.#children;
+  }
+
   async render() {
+    if (rendering) return (logEvents && console.error("Render called during render"));
+    rendering = true;
     if (logEvents) console.log("rendering...");
     i = 0;
     ieffect = 0;
     iref = 0;
+    imemo = 0;
 
     try {
       let childs = await this.#children(this.#state);
       childs = expandArray(childs);
+      currentChildren = childs;
 
       const left = { v: childs.length };
 
@@ -407,8 +450,11 @@ class VDOM {
 
       this.#mnt.appendChild(errel);
     }
+    rendering = false;
   }
 }
+
+let rendering = false;
 
 let vdom;
 
@@ -455,7 +501,7 @@ export function useState(stdval) {
   function setState(val) {
     if (typeof val == "function") val = val(states[index]);
     states[index] = val;
-    rerender();
+    if (!rendering) rerender();
   }
   i++;
   return [states[index], setState];
@@ -474,7 +520,7 @@ export function useIDState(id, stdval) {
   function setState(val) {
     if (typeof val == "function") val = val(idstates[id]);
     idstates[id] = val;
-    rerender();
+    if (!rendering) rerender();
   }
 
   return [idstates[id], setState];
@@ -616,4 +662,174 @@ export function reset() {
   iref = 0;
   effects = [];
   states = [];
+}
+
+let currentChildren = [];
+
+window.featherframe = {};
+window.featherframe.getDevtoolsObject = function () {
+  return [
+    {
+      title: "Contexts",
+      value: ObjectToDevtoolDisplayable(contexts),
+    },
+    {
+      title: "Nodes",
+      value: [
+        {
+          title: "<Root />",
+          value: currentChildren.map((el) =>
+            el instanceof VNode ? el.getDevtoolsObject() : el.toString()
+          ),
+        },
+      ],
+    },
+    {
+      title: "States",
+      value: states,
+    },
+    {
+      title: "IDStates",
+      value: ObjectToDevtoolDisplayable(idstates),
+    },
+    {
+      title: "Effects",
+      value: effects.map((el) => [
+        {
+          title: "acc",
+          value: el.lastchange,
+        },
+        { title: "value", value: el.func },
+        { title: "Changed", value: el.changed ? "true" : "false" },
+      ]),
+    },
+    {
+      title: "In Use",
+      value: [
+        `Effects: ${ieffect + 1}/${effects.length}`,
+        `States: ${i + 1}/${states.length}`,
+        `Contexts: ${Object.keys(contexts).length}`,
+        `IDStates: ${Object.keys(idstates).length}`,
+      ],
+    },
+  ];
+};
+function ObjectToDevtoolDisplayable(obj) {
+  const vals = Object.values(obj);
+  const keys = Object.keys(obj);
+  const displayable = [];
+
+  for (const i in keys) {
+    displayable.push({
+      title: keys[i],
+      value: vals[i],
+    });
+  }
+
+  return displayable;
+}
+
+const memos = [];
+let imemo = 0;
+
+export function useMemo(func, deps) {
+  if (typeof func != "function") return undefined;
+  const index = imemo;
+  imemo++;
+  if (memos[index] == undefined)
+    memos[index] = {
+      value: func(),
+      lastdeps: deps,
+    };
+  else {
+    let is_eq = true;
+    if (memos[index].lastdeps instanceof Array) {
+      const lastdeps = memos[index].lastdeps;
+      for (const i in lastdeps) lastdeps[i] == deps[i] ? null : (is_eq = false);
+    } else is_eq = deps == memos[index].lastdeps;
+
+    if (!is_eq)
+      memos[index] = {
+        value: func(),
+        lastdeps: deps,
+      };
+  }
+
+  return memos[index].value;
+}
+
+export function useFetch(url, parameters) {
+  const [data, setData] = useState({
+    url,
+    parameters,
+    loading: false,
+    data: null,
+    valid: false,
+    error: false,
+    response: null,
+  });
+
+  const newData = { ...data };
+
+  if (
+    !data.valid ||
+    data.url != url ||
+    parameters.method != data.parameters.method
+  ) {
+    data.loading = true;
+    data.error = null;
+    data.response = fetch(data.url, data.parameters).then(async (response) => {
+      if (!response.ok)
+        return setData((data) => ({
+          ...data,
+          data: null,
+          error: true,
+          loading: false,
+          response: null,
+        }));
+      let data = response.toString();
+      if (
+        (data.startsWith("{") && data.endsWith("}")) ||
+        (data.startsWith("[") && data.endsWith("]"))
+      )
+        try {
+          data = JSON.parse(data);
+        } catch {}
+      setData((oldData) => ({
+        ...oldData,
+        response: null,
+        error: false,
+        loading: false,
+        data,
+      }));
+    });
+  }
+
+  newData.valid = true;
+  newData.url = url ? url : newData.url;
+  newData.parameters = parameters ? parameters : newData.parameters;
+
+  setData(newData);
+
+  function change(url, parameters) {
+    setData((data) => {
+      const newData = { ...data };
+      newData.url = url ? url : newData.url;
+      newData.parameters = parameters ? parameters : newData.parameters;
+      return newData;
+    });
+  }
+
+  function invalidate() {
+    setData((data) => ({ ...data, valid: false }));
+  }
+
+  return {
+    data: newData.data,
+    loading: newData.loading,
+    invalidate,
+    change,
+    refetch: invalidate,
+    error: newData.error,
+  };
 }

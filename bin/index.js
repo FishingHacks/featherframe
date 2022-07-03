@@ -21,7 +21,6 @@ if (process.argv[2] == "-v" || process.argv[2] == "--version") {
 }
 
 if (process.argv[2] == "--build" && process.argv[3]) {
-    console.log(process.argv)
   let debugprint = false;
   if (process.argv[4])
     switch (process.argv[4]) {

@@ -76,8 +76,7 @@ async function build(path, { debugprint }) {
   } else {
     if (debugprint) console.log(redBright("No Middleware directory"));
   }
-
-  console.log("Collecting pages...");
+  if (debugprint) console.log("Collecting pages...");
 
   const backendpages = [];
   const frontendpages = [];
@@ -91,7 +90,8 @@ async function build(path, { debugprint }) {
   const pagesLeft = { v: pages.length };
 
   pages.forEach(async (el) => {
-    console.log("Collecting " + el.method.toUpperCase() + " " + el.path);
+    if (debugprint)
+      console.log("Collecting " + el.method.toUpperCase() + " " + el.path);
     const orig = join(path, "/pages/", `${el.path}.${el.method}.js`);
     try {
       await access(orig, R_OK);
@@ -151,7 +151,7 @@ async function route(app, express, { debugprint }) {
   } else {
     if (debugprint) console.log("Buildfile not found! Building Project...");
     pkg = await build(app.path, { debugprint });
-    if (debugprint) console.log("Project Build")
+    if (debugprint) console.log("Project Build");
   }
 
   // server renderengine first, so that nothing breaks (hopefully)
@@ -303,7 +303,7 @@ async function route(app, express, { debugprint }) {
             )
         );
     };
-    console.log(`Registering ALL ${expressPath}`);
+    if (debugprint) console.log(`Registering ALL ${expressPath}`);
     express.all(expressPath, function (req, res, next) {
       try {
         func(req, res, next);

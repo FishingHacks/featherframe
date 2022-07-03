@@ -11,6 +11,8 @@ export {
   useRef,
   useReducer,
   createContext,
+  useMemo,
+  useFetch,
   useContext,
 } from "./engine";
 import htm from "https://unpkg.com/htm?module";
@@ -25,7 +27,10 @@ import {
   getTitle,
   useEffect,
   useRef,
+  getFuncName,
+  useFetch,
   useReducer,
+  useMemo,
   createContext,
   useContext,
 } from "./engine";
@@ -187,11 +192,13 @@ const frameworkObject = {
   useState,
   useIDState,
   setTitle,
+  getFuncName,
   getTitle,
   useEffect,
   useRef,
   useReducer,
   createContext,
+  useMemo,
   useContext,
   App,
   html: htm.bind(h),
@@ -200,6 +207,7 @@ const frameworkObject = {
   requireScript,
   matchpath,
   redirect,
+  useFetch,
   goto: (pathname) => {
     redirect(new URL(location.origin + pathname));
   },
