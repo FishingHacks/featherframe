@@ -1,8 +1,8 @@
-export interface cliConfig {
+export declare interface cliConfig {
     debugprint?: boolean,
 }
 
-export interface config {
+export declare interface config {
     readonly customHTML?: string;
     /**
      * Not implemented yet

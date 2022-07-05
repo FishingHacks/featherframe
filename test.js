@@ -1,4 +1,4 @@
-const { loadApp } = require("./index");
+const { loadApp } = require("./server");
 const express = require("express");
 const { join } = require("path")
 

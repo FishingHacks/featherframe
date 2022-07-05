@@ -1,12 +1,5 @@
 export function getFuncName(func) {
-  const funcRegex =
-    /^((export +)?(async +)?function) *([a-zA-Z_$]+) *\(([^),]+(,[^),])*)*\) *{/g;
-  let funcexec = funcRegex.exec("" + func);
-  if (!funcexec) funcexec = funcRegex.exec("" + func);
-  if (!funcexec) funcexec = funcRegex.exec("" + func);
-  if (!funcexec) funcexec = funcRegex.exec("" + func);
-
-  return funcexec && funcexec[4] ? funcexec[4] : null;
+  return func.name ? func.name : null;
 }
 
 function expandArray(childs) {
@@ -32,9 +25,13 @@ async function awaitForeach(arr, cb) {
   return;
 }
 
-const logEvents = feahterframeConfig.logEvents || false;
+if (!window.featherframeConfig)
+  window.featherframeConfig = { logEvents: false, devtools: false };
 
-class VNode {
+const logEvents = featherframeConfig?.logEvents || false;
+const devtools = featherframeConfig?.devtools || false;
+
+export class VNode {
   #children = [];
   #attrs = [];
   events = [];
@@ -188,6 +185,10 @@ class VNode {
   get children() {
     return this.#children;
   }
+
+  get name() {
+    return this.#name;
+  }
 }
 
 class VDOM {
@@ -231,7 +232,8 @@ class VDOM {
   }
 
   async render() {
-    if (rendering) return (logEvents && console.error("Render called during render"));
+    if (rendering)
+      return logEvents && console.error("Render called during render");
     rendering = true;
     if (logEvents) console.log("rendering...");
     i = 0;
@@ -451,6 +453,21 @@ class VDOM {
       this.#mnt.appendChild(errel);
     }
     rendering = false;
+    if (devtools) window.featherframe.displayDT();
+    if (devtools) {
+      let div = document.getElementById("FeatherFrameDevTools");
+      if (!div) {
+        const ffdt = document.createElement("div");
+        ffdt.id = "FeatherFrameDevTools";
+        document.body.append(ffdt);
+      }
+      div = document.getElementById("FeatherFrameDevTools");
+      if (div.getElementsByClassName("details").length) {
+        Object.values(div.getElementsByClassName("details")).forEach((el) =>
+          div.removeChild(el)
+        );
+      }
+    }
   }
 }
 
@@ -667,66 +684,133 @@ export function reset() {
 let currentChildren = [];
 
 window.featherframe = {};
-window.featherframe.getDevtoolsObject = function () {
-  return [
-    {
-      title: "Contexts",
-      value: ObjectToDevtoolDisplayable(contexts),
-    },
-    {
-      title: "Nodes",
-      value: [
-        {
-          title: "<Root />",
-          value: currentChildren.map((el) =>
-            el instanceof VNode ? el.getDevtoolsObject() : el.toString()
-          ),
-        },
-      ],
-    },
-    {
-      title: "States",
-      value: states,
-    },
-    {
-      title: "IDStates",
-      value: ObjectToDevtoolDisplayable(idstates),
-    },
-    {
-      title: "Effects",
-      value: effects.map((el) => [
-        {
-          title: "acc",
-          value: el.lastchange,
-        },
-        { title: "value", value: el.func },
-        { title: "Changed", value: el.changed ? "true" : "false" },
-      ]),
-    },
-    {
-      title: "In Use",
-      value: [
-        `Effects: ${ieffect + 1}/${effects.length}`,
-        `States: ${i + 1}/${states.length}`,
-        `Contexts: ${Object.keys(contexts).length}`,
-        `IDStates: ${Object.keys(idstates).length}`,
-      ],
-    },
-  ];
-};
-function ObjectToDevtoolDisplayable(obj) {
-  const vals = Object.values(obj);
-  const keys = Object.keys(obj);
-  const displayable = [];
 
-  for (const i in keys) {
-    displayable.push({
-      title: keys[i],
-      value: vals[i],
-    });
+let RootIsActive = true;
+
+function toggleRoot() {
+  try {
+    RootIsActive = !RootIsActive;
+    window.featherframe.displayDT();
+  } catch (e) {
+    console.error(e);
   }
+}
+function triggerState(uuid) {
+  try {
+    DevToolsState[uuid] = !DevToolsState[uuid];
+    window.featherframe.displayDT();
+  } catch (e) {
+    console.error(e);
+  }
+  logInfosofVNode(getVNodeFromUUID(uuid));
+}
 
-  return displayable;
+window.FDTtoggleRoot = toggleRoot;
+window.FDTtriggerState = triggerState;
+
+let DevToolsState = {};
+
+window.featherframe.displayDT = function () {
+  const a_el = document.createElement("a");
+  a_el.href = "javascript:FDTtoggleRoot()";
+  a_el.innerHTML = `${RootIsActive ? "▼&nbsp;" : "▶&nbsp;"}Root`;
+  if (RootIsActive)
+    display(transform(), DevToolsState, "&nbsp;&nbsp;").forEach((el) =>
+      a_el.append(el)
+    );
+  a_el.style.color = "black";
+  a_el.style.textDecoration = "none";
+  a_el.style.display = "block";
+  let div = document.getElementById("FeatherFrameDevTools");
+  if (!div) {
+    const ffdt = document.createElement("div");
+    ffdt.id = "FeatherFrameDevTools";
+    document.body.append(ffdt);
+  }
+  div = document.getElementById("FeatherFrameDevTools");
+  Object.values(div.children).forEach((el) => div.removeChild(el));
+  div.append(a_el);
+  return a_el;
+};
+
+function transform(childs, parents = "1") {
+  if (!childs) childs = currentChildren;
+
+  const nc = {};
+
+  childs.forEach((el, i) => {
+    el instanceof VNode
+      ? (nc[i + "-" + parents + ":" + el.name] = transform(
+          el.children,
+          i + "-" + parents
+        ))
+      : [];
+  });
+
+  return Object.keys(nc).length == 0 ? null : nc;
+}
+
+function display(transformed, state, pref) {
+  const elements = [];
+  const keys = Object.keys(transformed);
+  const values = Object.values(transformed);
+  keys
+    .map((el) => {
+      let name = el.split(":");
+      const uuid = name.shift();
+      name = name.join(":");
+      return { name, uuid };
+    })
+    .forEach((el, i) => {
+      const { name, uuid } = el;
+      if (state[uuid] != true && state[uuid] != false) state[uuid] = false;
+      let a = document.createElement("a");
+      a.innerHTML = `${pref}${
+        values[i] != null && values[i] != undefined
+          ? state[uuid]
+            ? "▼&nbsp;"
+            : "▶&nbsp;"
+          : ""
+      }${name
+        .replaceAll("&", "&amp;")
+        .replaceAll(" ", "&nbsp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")}`;
+      a.style.color = "black";
+      a.style.textDecoration = "none";
+      if (values[i] != null && values[i] != undefined)
+        a.href =
+          "javascript:FDTtriggerState('" + uuid.replaceAll("'", "\\'") + "')";
+      else
+        a.href =
+          "javascript:FDTInfos(FDTGetVNode('" +
+          uuid.replaceAll("'", "\\'") +
+          "'))";
+      if (state[uuid] && values[i] != null && values[i] != undefined) {
+        display(values[i], state, pref + "&nbsp;&nbsp;").forEach((child) =>
+          a.append(child)
+        );
+      }
+      elements.push(document.createElement("br"));
+      elements.push(a);
+    });
+  return elements;
+}
+
+window.featherframe.transform = transform;
+
+function getChilds(childs, pref) {
+  let str = "";
+  childs.forEach((el) => {
+    let childRep =
+      el instanceof VNode ? getChilds(el.children, pref + "  ") : "";
+    el instanceof VNode
+      ? (str += `\n${pref}${childRep != "" ? "▼ " : ""}${
+          el.name //.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll(" ", "&nbsp;")
+        }${childRep}`)
+      : null;
+  });
+  return str;
 }
 
 const memos = [];
@@ -766,28 +850,27 @@ export function useFetch(url, parameters) {
     data: null,
     valid: false,
     error: false,
-    response: null,
+    request: null,
   });
-
-  const newData = { ...data };
 
   if (
     !data.valid ||
     data.url != url ||
-    parameters.method != data.parameters.method
+    parameters?.method != data?.parameters?.method
   ) {
     data.loading = true;
     data.error = null;
-    data.response = fetch(data.url, data.parameters).then(async (response) => {
+    data.data = null;
+    data.request = fetch(data.url, data.parameters).then(async (response) => {
       if (!response.ok)
         return setData((data) => ({
           ...data,
           data: null,
           error: true,
           loading: false,
-          response: null,
+          request: null,
         }));
-      let data = response.toString();
+      let data = await response.text();
       if (
         (data.startsWith("{") && data.endsWith("}")) ||
         (data.startsWith("[") && data.endsWith("]"))
@@ -797,7 +880,7 @@ export function useFetch(url, parameters) {
         } catch {}
       setData((oldData) => ({
         ...oldData,
-        response: null,
+        request: null,
         error: false,
         loading: false,
         data,
@@ -805,11 +888,11 @@ export function useFetch(url, parameters) {
     });
   }
 
-  newData.valid = true;
-  newData.url = url ? url : newData.url;
-  newData.parameters = parameters ? parameters : newData.parameters;
+  data.valid = true;
+  data.url = url ? url : data.url;
+  data.parameters = parameters ? parameters : data.parameters;
 
-  setData(newData);
+  setData(data);
 
   function change(url, parameters) {
     setData((data) => {
@@ -825,11 +908,134 @@ export function useFetch(url, parameters) {
   }
 
   return {
-    data: newData.data,
-    loading: newData.loading,
+    data: data.data,
+    loading: data.loading,
     invalidate,
     change,
     refetch: invalidate,
-    error: newData.error,
+    error: data.error,
+    request: data.request,
   };
 }
+
+function traverse(p, arr) {
+  if (arr.length < 1) return p;
+  let val = arr.shift();
+  return traverse(p.children[val], arr);
+}
+
+function getVNodeFromUUID(uuid) {
+  uuid = uuid
+    .substring(0, uuid.length - 2)
+    .split("-")
+    .reverse();
+  return traverse(currentChildren[uuid.shift()], uuid);
+}
+
+window.FDTGetVNode = getVNodeFromUUID;
+
+function logInfosofVNode(vnode) {
+  if (!vnode instanceof VNode)
+    return console.error("supposedly vnode", vnode, "is not of type VNode");
+  let textContent = vnode.children
+    .map((el) =>
+      el instanceof VNode ? "" : "\n" + el.toString().replaceAll(" ", "&nbsp;")
+    )
+    .join("")
+    .substring(1)
+    .replaceAll(/^ +/g, "")
+    .replaceAll(/ +$/g, "")
+    .replaceAll("&nbsp;", " ");
+  let attributes = vnode.attributes;
+  let events = vnode.events;
+
+  const div = document.getElementById("FeatherFrameDevTools");
+  const events_el = document.createElement("p");
+  events_el.textContent = "Registered Events:";
+  const attributes_el = document.createElement("p");
+  attributes_el.textContent = "Attributes:";
+  const attrKeys = Object.keys(attributes);
+  const evKeys = Object.keys(events);
+  attrKeys.forEach((el) => {
+    if (el == "events") return;
+    attributes_el.append(document.createElement("br"));
+    let str = el;
+    const attr = attributes[el];
+    if (typeof attr == "string") str += attr.length ? "=" + safe(attr) : "";
+    else if (typeof attr == "number") str += "=" + attr;
+    else if (typeof attr == "bigint") str += "=" + attr;
+    else if (typeof attr == "symbol") str += "=" + attr;
+    else if (typeof attr == "boolean") str += "=" + attr ? "true" : "false";
+    else if (typeof attr == "function") str += "=fn " + getFuncName(attr);
+    else str += JSON.stringify(attr);
+    attributes_el.append(document.createTextNode(str));
+  });
+
+  evKeys.forEach((el) => {
+    events_el.append(document.createElement("br"));
+    let str = el;
+    const attr = events[el];
+    if (typeof attr == "string") str += attr.length ? ": " + safe(attr) : "";
+    else if (typeof attr == "number") str += ": " + safe(attr);
+    else if (typeof attr == "bigint") str += ": " + safe(attr);
+    else if (typeof attr == "symbol") str += ": " + safe(attr);
+    else if (typeof attr == "boolean") str += ": " + attr ? "true" : "false";
+    else if (typeof attr == "function")
+      str +=
+        ': <span id="FFDTFN">fn </span>' +
+        safe(getFuncName(attr) == null ? "anonymous" : getFuncName(attr)) +
+        " <a href=\"javascript:console.log('" +
+        safejs(attr.toString()) +
+        "')\">(log fn)</a>";
+    else str += JSON.stringify(attr);
+    events_el.innerHTML += "\n" + str;
+  });
+
+  const nodes = [];
+  if (textContent.length) {
+    // we abuse that !!0 === false
+    const textContent_el = document.createElement("p");
+    textContent_el.textContent = "Content: " + textContent;
+    nodes.push(textContent_el);
+  }
+  if (events_el.children.length) nodes.push(events_el);
+  if (attributes_el.children.length) nodes.push(attributes_el);
+  appendInfo(div, ...nodes);
+}
+
+function safe(str) {
+  return str
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll(" ", "&nbsp;")
+    .replaceAll("'", "&#39;");
+}
+
+function safejs(str) {
+  return str
+    .replaceAll("&", "\\&amp;")
+    .replaceAll("<", "\\&lt;")
+    .replaceAll(">", "\\&gt;")
+    .replaceAll('"', "\\&quot;")
+    .replaceAll("'", "\\&#39;")
+    .replaceAll("\n", "\\n");
+}
+
+function appendInfo(div, ...node) {
+  if (!node.length) return;
+  if (div.getElementsByClassName("details").length) {
+    Object.values(div.getElementsByClassName("details")).forEach((el) =>
+      div.removeChild(el)
+    );
+  }
+  const dd = document.createElement("div");
+  dd.style.display = "block";
+  dd.style.borderLeft = "3px black solid";
+  dd.classList.add("details");
+  dd.append(...node);
+  div.append(dd);
+}
+
+window.FDTInfos = logInfosofVNode;

@@ -58,7 +58,7 @@ if (process.argv[2] == "--build" && process.argv[3]) {
 
   const express = require("express")();
   process.chdir(join(process.argv[1], "../../"));
-  const { loadApp } = require("../framework/index.js");
+  const { loadApp } = require("../server/index.js");
 
   (async function () {
     await loadApp(path, express, options);

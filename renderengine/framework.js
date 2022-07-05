@@ -1,4 +1,4 @@
-const logEvents = feahterframeConfig.logEvents || false;
+const logEvents = featherframeConfig?.logEvents || false;
 
 export {
   h,
@@ -11,12 +11,14 @@ export {
   useRef,
   useReducer,
   createContext,
+  VNode,
   useMemo,
   useFetch,
   useContext,
 } from "./engine";
 import htm from "https://unpkg.com/htm?module";
 import {
+  VNode,
   reset,
   h,
   render as r,
@@ -187,6 +189,7 @@ function errorPromise(err) {
 }
 
 const frameworkObject = {
+  VNode,
   h,
   rerender,
   useState,
