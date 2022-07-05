@@ -5,5 +5,5 @@ import { render, html, App } from "/framework";
     <a href="/">Home</a>
     <a href="/demo">Demo</a>
     <${App} />
-    `);
+    `, document.getElementById("root"));
 })();
