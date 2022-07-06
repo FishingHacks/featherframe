@@ -33,8 +33,8 @@ const devtools = featherframeConfig?.devtools || false;
 
 export class VNode {
   #children = [];
-  #attrs = [];
-  events = [];
+  #attrs = {};
+  events = {};
   tag = "";
   #name = "anonymous";
 
@@ -44,7 +44,7 @@ export class VNode {
     children = children[0] instanceof Array ? children[0] : [children[0]];
     this.#name = typeof tag == "string" ? tag : getFuncName(tag);
 
-    if (!attrs.events || !(attrs.events instanceof Array)) {
+    if (!attrs.events) {
       attrs.events = {};
     }
     let events = attrs.events;
@@ -103,7 +103,15 @@ export class VNode {
     if (logEvents) console.log("rendering VNode", this);
     try {
       if (typeof this.tag == "function")
-        this.#children = await this.tag(this.#attrs, this.#children);
+        return await this.tag(this.#attrs, this.#children);
+      else {
+        const attrKeys = Object.keys(this.#attrs);
+        for (const i in attrKeys) {
+          const attr = attrKeys[i];
+          if (this.#attrs[attr] == false) delete this.#attrs[attr];
+          else if (this.#attrs[attr] == true) this.#attrs[attr] = "";
+        }
+      }
 
       this.#attrs.xmlns ? (xmlns = this.#attrs.xmlns) : null;
 
@@ -140,13 +148,32 @@ export class VNode {
 
       this.#children = expandArray(this.#children);
 
-      await awaitForeach(this.#children, async (node) => {
-        element.appendChild(
-          node instanceof VNode
-            ? await node.render(xmlns)
-            : document.createTextNode(node)
-        );
-      });
+      const childs = [...this.#children];
+
+      while (childs.length > 0) {
+        const el = childs.pop();
+
+        let n = null;
+
+        if (el instanceof VNode) n = await el.render();
+        else if (typeof el == "object") {
+          try {
+            n = document.createTextNode(JSON.stringify(el));
+          } catch (e) {
+            n = document.createElement("p");
+            n.style.color = "red";
+            n.textContent = e.stack;
+          }
+        } else n = document.createTextNode(el.toString());
+
+        if (n instanceof Array) {
+          n = expandArray(n);
+          n.reverse();
+          for (const i in n) {
+            childs.push(n[i]);
+          }
+        } else element.append(n);
+      }
 
       if (typeof element.getAttribute("ref") == "string") {
         this.#attrs.ref ? (this.#attrs.ref.current = element) : null;
@@ -235,6 +262,7 @@ class VDOM {
     if (rendering)
       return logEvents && console.error("Render called during render");
     rendering = true;
+    await new Promise((r) => setTimeout(r, 10)); // <- wait a bit in case multiple rerenders get caused by setting of states iex.
     if (logEvents) console.log("rendering...");
     i = 0;
     ieffect = 0;
@@ -244,21 +272,36 @@ class VDOM {
     try {
       let childs = await this.#children(this.#state);
       childs = expandArray(childs);
-      currentChildren = childs;
-
-      const left = { v: childs.length };
+      currentChildren = [...childs];
 
       let error = false;
       const children_to_append = [];
-      await awaitForeach(childs, async (c) => {
+      while (childs.length > 0) {
         try {
-          children_to_append.push(
-            typeof c == "string" ? document.createTextNode(c) : await c.render()
-          );
+          const el = childs.pop();
+          let n = null;
+
+          if (el instanceof VNode) n = await el.render();
+          else if (typeof el == "object") {
+            try {
+              n = document.createTextNode(JSON.stringify(el));
+            } catch (e) {
+              n = document.createElement("p");
+              n.style.color = "red";
+              n.textContent = e.stack;
+            }
+          } else n = document.createTextNode(el.toString());
+          if (n instanceof Array) {
+            n = expandArray(n);
+            n.reverse();
+            for (const i in n) {
+              childs.push(n[i]);
+            }
+          } else children_to_append.push(n);
         } catch (e) {
           error = e;
         }
-      });
+      }
 
       if (logEvents) console.log("removing old elements");
       Object.values(this.#mnt.children).forEach((c) => {
@@ -645,7 +688,23 @@ export function useReducer(reducer, initialValue) {
   const [state, setState] = useState(initialValue);
 
   function dispatch(action) {
-    setState(reducer(state, action));
+    const newState = reducer(state, action);
+    if (newState == state) return;
+    else if (typeof newState == "object" && typeof state == "object") {
+      const nsK = Object.keys(newState);
+      const nsV = Object.values(newState);
+      const sK = Object.keys(state);
+      const sV = Object.keys(state);
+      if (sK.length != nsK.length) return setState(newState);
+      if (sV.length != nsV.length) return setState(newState);
+      if (
+        nsK.map((el, i) => el == sK[i]).includes(false) ||
+        nsV.map((el, i) => el == sV[i]).includes(false)
+      )
+        return setState(newState);
+      return;
+    }
+    return setState(newState);
   }
 
   return [state, dispatch];
@@ -860,7 +919,7 @@ export function useFetch(url, parameters) {
   ) {
     data.loading = true;
     data.error = null;
-    data.data = null;
+    if (!data?.parameters?.keep) data.data = null;
     data.request = fetch(data.url, data.parameters).then(async (response) => {
       if (!response.ok)
         return setData((data) => ({
