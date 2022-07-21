@@ -128,7 +128,9 @@ if (argsObj.build) {
   const name = argsObj._args[0];
   const desc = argsObj._args[1];
   (async function () {
-    await fs.mkdir(path);
+    try {
+      await fs.mkdir(path);
+    } catch {}
     await fs.mkdir(join(path, "middleware"));
     await fs.mkdir(join(path, "pages"));
     await fs.mkdir(join(path, "pages/api"));
@@ -208,11 +210,15 @@ if (argsObj.build) {
       .catch(() => left.v--);
     left.v++;
     writeFile(join(path, "public/pages/index.js"), [
-      'const { html } = require("feahterframe");',
+      'const { html, requireCSS } = require("featherframe");',
+      "",
+      "requireCSS(\"/style.css\")",
       "",
       "export async function render() {",
       "  return html`",
-      "    ",
+      "    <h1>Hello, World!</h1>",
+      '    <p>A new Featherframe App! Edit <a href="/__featherframe/preview?url=/pages/index.js" target="_blank">/public/pages/index.js</a> to change the contents of this Site.</p>',
+      '    <p>Also, check out the <a href="https://github.com/FishingHacks/featherframe/wiki" target="_blank">Wiki</a> for more help</p>',
       "  `;",
       "}",
     ])
@@ -221,7 +227,7 @@ if (argsObj.build) {
     left.v++;
     writeFile(join(path, "pages/api/index.js"), [
       "module.exports = (req, res) => {",
-      "    ",
+      "    res.json({ response: 'Hello :>' })",
       "}",
     ])
       .then(() => left.v--)
@@ -229,7 +235,49 @@ if (argsObj.build) {
     left.v++;
     writeFile(join(path, "middleware/index.js"), [
       "module.exports = function(req, res, next) {",
-      "    ",
+      "    next();",
+      "}",
+    ])
+      .then(() => left.v--)
+      .catch(() => left.v--);
+
+    left.v++;
+    writeFile(join(path, "public/style.css"), [
+      "body {",
+      "    background-color: rgb(46, 46, 46);",
+      "    color: rgb(236, 241, 245);",
+      "    font-size: 2rem;",
+      "    overflow: hidden;",
+      "}",
+      "",
+      "a {",
+      "    color: rgb(170, 170, 170);",
+      "    text-decoration: none;",
+      "",
+      "",
+      "    background-image: linear-gradient(90deg, red, blue);",
+      "    background-repeat: no-repeat;",
+      "    background-position: bottom left;",
+      "    background-size: 0% 12%;",
+      "    transition: background-size 500ms ease-in-out,",
+      "                color 300ms ease-in-out;",
+      "}",
+      "",
+      "a:hover,",
+      "a:active,",
+      "a.active {",
+      "  background-size: 100% 12%;",
+      "  color: rgb(88, 88, 197);",
+      "}",
+      "",
+      "#root {",
+      "    display: flex;",
+      "    flex-direction: column;",
+      "    justify-content: center;",
+      "    align-items: center;",
+      "",
+      "    height: 100vh;",
+      "    width: 100vw;",
       "}",
     ])
       .then(() => left.v--)
@@ -237,9 +285,9 @@ if (argsObj.build) {
     left.v++;
     writeFile(join(path, "package.json"), [
       "{",
-      '  "name": "",',
+      '  "name": "' + name.replaceAll('"', '\\"') + '",',
       '  "version": "1.0.0",',
-      '  "description": "",',
+      '  "description": "' + desc.replaceAll('"', '\\"') + '",',
       '  "scripts": {',
       '    "start": "featherframe ."',
       "  },",
@@ -256,7 +304,7 @@ if (argsObj.build) {
         'Your Project "' +
           name +
           '" in folder "' +
-          path +
+          path.replace(process.cwd(), "").substring(1) +
           "\" was successfully set up! Run 'npm install' to install all dependencies.\nRun the App with 'npm start'.\nPersonalize the package.json as you please"
       )
     );

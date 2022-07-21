@@ -88,7 +88,8 @@ fetch(location.origin + "/__featherframe/bckndpgs")
 
 const loadedSites = {};
 
-export async function App() {
+export async function App({ path }) {
+  if (!path || typeof path != "string") path = window.location.pathname;
   if (FRONTEND_PGS.length < 1)
     await fetch(location.origin + "/__featherframe/frndpgs")
       .then((data) => data.json())
@@ -101,16 +102,13 @@ export async function App() {
       );
   try {
     let app = { render: () => [] };
-    if (!!loadedSites[location.pathname]) app = loadedSites[location.pathname];
+    if (!!loadedSites[path]) app = loadedSites[path];
     else {
       let importPath = location.origin + "/pages/";
       for (const i in FRONTEND_PGS) {
         if (!isNaN(Number(i))) {
           const el = FRONTEND_PGS[i];
-          if (
-            new RegExp(el.regex).exec(location.pathname)?.join("") ==
-            location.pathname
-          ) {
+          if (new RegExp("^" + el.regex + "$").exec(path)?.join("") == path) {
             importPath += el.path + ".js";
             break;
           }
@@ -119,7 +117,7 @@ export async function App() {
       importPath = importPath.replaceAll(/\/+/g, "/");
       app = await import(importPath);
     }
-    loadedSites[location.pathname] = app;
+    loadedSites[path] = app;
     if (app.render && typeof app.render == "function") {
       try {
         return await app.render();
@@ -127,7 +125,7 @@ export async function App() {
         console.error("Error while rendering the app", e);
         return [];
       }
-    } else return html`Site exports no render function`;
+    } else return html`<p>Site exports no render function</p>`;
   } catch (e) {
     console.log(e);
     return html`<p>An Error occured: ${e.toString()}</p>`;
@@ -135,11 +133,26 @@ export async function App() {
 }
 
 window.addEventListener("click", (e) => {
-  if (!e.target.href) return false;
-  if (e.target.target == "_blank") return false;
+  if (!e.target.href && !e.target.getAttribute("href")) return false;
+  if (
+    e.target.target == "_blank" ||
+    e.target.getAttribute("target") === "_blank"
+  )
+    return false;
   if (e.ctrlKey) return false;
+  let tHref = e.target.href ? e.target.href : e.target.getAttribute("href");
+  if (!tHref) return false;
   try {
-    const url = new URL(e.target.href);
+    new URL(tHref);
+  } catch {
+    tHref = (
+      tHref.startsWith("/")
+        ? window.location.origin + tHref
+        : window.location.pathname + tHref
+    ).replaceAll(/\/+/g, "/");
+  }
+  try {
+    const url = new URL(tHref);
     if (url.origin != location.origin) return false;
     if (
       BACKEND_PGS.map(
@@ -152,11 +165,10 @@ window.addEventListener("click", (e) => {
   }
   let uri = undefined;
   try {
-    uri = new URL(e.target.href);
+    uri = new URL(tHref);
   } catch {
     return false;
   }
-  console.log("SPA Action", uri.href);
   e.preventDefault();
 
   history.pushState(uri.href, uri.href, uri.href);
@@ -169,7 +181,6 @@ export function redirect(url) {
     let uri = new URL(url);
     if (window.location.origin != uri.origin)
       return (window.location.href = uri.href);
-    console.log("SPA Action", uri.href);
     history.pushState(uri.href, uri.href, uri.href);
     reset();
     rerender();
@@ -200,9 +211,12 @@ const frameworkObject = {
   useEffect,
   useRef,
   useReducer,
+  loadModules,
   createContext,
   useMemo,
   useContext,
+  matchesPathExact,
+  RouterLink,
   App,
   html: htm.bind(h),
   render,
@@ -222,10 +236,11 @@ export function goto(pathname) {
 
 const loadedModules = {
   framework: frameworkObject,
-  featherframe: frameworkObject
+  featherframe: frameworkObject,
 };
 
 function loadModule(modulepath, modulename) {
+  if (loadModule[modulename]) return new Promise((r) => r());
   if (typeof modulepath != "string")
     return errorPromise("[ERR] module name " + modulepath + " is not a string");
   modulename = modulepath;
@@ -273,3 +288,49 @@ Object.defineProperty(window, "require", {
   value: require,
   writable: false,
 });
+
+export function matchesPathExact(path, pathname = window.location.pathname) {
+  for (const i in FRONTEND_PGS) {
+    if (!isNaN(Number(i))) {
+      const el = FRONTEND_PGS[i];
+      if (new RegExp("^" + el.regex + "$").exec(pathname)?.join("") == path) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export async function RouterLink(
+  { path, tag, class: cls, href, ...other },
+  children
+) {
+  if (FRONTEND_PGS.length < 1)
+    await fetch(location.origin + "/__featherframe/frndpgs")
+      .then((data) => data.json())
+      .then((arr) =>
+        arr instanceof Array
+          ? arr.forEach((el) =>
+              el.regex && el.path ? FRONTEND_PGS.push(el) : null
+            )
+          : null
+      );
+  if (!href || typeof href != "string") href = false;
+  if (!path || typeof path != "string") path = "";
+  if (!cls || typeof cls != "string") cls = "";
+  return h(
+    tag == "" || typeof tag != "string" ? "a" : tag,
+    {
+      ...other,
+      href,
+      class:
+        cls +
+        (matchesPathExact(href, window.location.pathname)
+          ? cls == ""
+            ? "pathMatchesExact"
+            : " pathMatchesExact"
+          : ""),
+    },
+    children
+  );
+}

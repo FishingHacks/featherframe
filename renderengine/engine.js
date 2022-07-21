@@ -2,6 +2,12 @@ export function getFuncName(func) {
   return func.name ? func.name : null;
 }
 
+function waitForLoad() {
+  return new Promise((r) =>
+    document?.body ? r() : window.addEventListener("DOMContentLoaded", r)
+  );
+}
+
 function expandArray(childs) {
   childs = childs instanceof Array ? childs : [childs];
 
@@ -108,8 +114,8 @@ export class VNode {
         const attrKeys = Object.keys(this.#attrs);
         for (const i in attrKeys) {
           const attr = attrKeys[i];
-          if (this.#attrs[attr] == false) delete this.#attrs[attr];
-          else if (this.#attrs[attr] == true) this.#attrs[attr] = "";
+          if (this.#attrs[attr] === false) delete this.#attrs[attr];
+          else if (this.#attrs[attr] === true) this.#attrs[attr] = "";
         }
       }
 
@@ -132,8 +138,8 @@ export class VNode {
 
       let attrKeys = Object.keys(this.#attrs);
       attrKeys.forEach((key) => {
-        if (key != null && key != undefined && key != "" && key != "xmlns");
-        element.setAttribute(key, this.#attrs[key]);
+        if (key != null && key != undefined && key != "" && key != "xmlns")
+          element.setAttribute(key, this.#attrs[key]);
       });
 
       Object.keys(this.events).forEach((ev) => {
@@ -148,31 +154,33 @@ export class VNode {
 
       this.#children = expandArray(this.#children);
 
-      const childs = [...this.#children];
-
+      const childs = [...this.#children].reverse();
       while (childs.length > 0) {
         const el = childs.pop();
 
-        let n = null;
+        if (el !== null && el !== undefined) {
+          let n = null;
 
-        if (el instanceof VNode) n = await el.render();
-        else if (typeof el == "object") {
-          try {
-            n = document.createTextNode(JSON.stringify(el));
-          } catch (e) {
-            n = document.createElement("p");
-            n.style.color = "red";
-            n.textContent = e.stack;
-          }
-        } else n = document.createTextNode(el.toString());
+          if (el instanceof VNode) n = await el.render(xmlns);
+          else if (typeof el == "object") {
+            try {
+              n = document.createTextNode(JSON.stringify(el));
+            } catch (e) {
+              n = document.createElement("p");
+              n.style.color = "red";
+              n.textContent = e.stack;
+            }
+          } else if (typeof el == "symbol") n = document.createTextNode(el.description);
+          else n = document.createTextNode(el.toString());
 
-        if (n instanceof Array) {
-          n = expandArray(n);
-          n.reverse();
-          for (const i in n) {
-            childs.push(n[i]);
-          }
-        } else element.append(n);
+          if (n instanceof Array) {
+            n = expandArray(n);
+            n.reverse();
+            childs.push(...n);
+          } else if (n === null || n === undefined) {/* Do nothing */}
+          else if (n instanceof VNode) childs.push(n);
+          else element.append(n);
+        }
       }
 
       if (typeof element.getAttribute("ref") == "string") {
@@ -181,7 +189,7 @@ export class VNode {
       }
       return element;
     } catch (e) {
-      if (e.message.substr(0, 30) == "Error whilst trying to render ") throw e;
+      if (e.message.substr(0, 30) == "Error whilst trying to render ") throw e; // to prevent smth like 'Error whilst trying to render Checkbox: Error whilst trying to render App: a is not defined'
       throw new Error(
         "Error whilst trying to render " + this.tag + ": " + e.message
       );
@@ -262,6 +270,7 @@ class VDOM {
     if (rendering)
       return logEvents && console.error("Render called during render");
     rendering = true;
+    const startTime = Date.now();
     await new Promise((r) => setTimeout(r, 10)); // <- wait a bit in case multiple rerenders get caused by setting of states iex.
     if (logEvents) console.log("rendering...");
     i = 0;
@@ -273,7 +282,6 @@ class VDOM {
       let childs = await this.#children(this.#state);
       childs = expandArray(childs);
       currentChildren = [...childs];
-
       let error = false;
       const children_to_append = [];
       while (childs.length > 0) {
@@ -281,7 +289,8 @@ class VDOM {
           const el = childs.pop();
           let n = null;
 
-          if (el instanceof VNode) n = await el.render();
+          if (el === null || el === undefined) {/* Do nothing */}
+          else if (el instanceof VNode) n = await el.render();
           else if (typeof el == "object") {
             try {
               n = document.createTextNode(JSON.stringify(el));
@@ -294,10 +303,10 @@ class VDOM {
           if (n instanceof Array) {
             n = expandArray(n);
             n.reverse();
-            for (const i in n) {
-              childs.push(n[i]);
-            }
-          } else children_to_append.push(n);
+          childs.push(...n);
+          } else if (n instanceof VNode) childs.push(n);
+          else if(n===undefined || n === null) {/* Do nothing */}
+          else children_to_append.push(n);
         } catch (e) {
           error = e;
         }
@@ -511,9 +520,13 @@ class VDOM {
         );
       }
     }
+    if (logEvents) console.log(`Rendered VDom in ${Date.now() - startTime}ms`);
+    if (rerendering) rerender()
+    rerendering = false;
   }
 }
 
+let rerendering = false;
 let rendering = false;
 
 let vdom;
@@ -522,7 +535,7 @@ export function rerender() {
   vdom?.render?.();
 }
 
-function waitForLoad() {
+function waitFor() {
   return new Promise((res) => {
     document?.body ? res() : null;
     window.addEventListener("load", res);
@@ -558,10 +571,11 @@ export function useState(stdval) {
   if (logEvents) console.log("using state#" + i.toString());
   if (states[i] == null || states[i] == undefined) states[i] = stdval;
   let index = i;
-  function setState(val) {
+  function setState(val, suppressRender = false) {
     if (typeof val == "function") val = val(states[index]);
     states[index] = val;
-    if (!rendering) rerender();
+    if (!rendering && !suppressRender) rerender();
+    else if (rendering) rerendering = true;
   }
   i++;
   return [states[index], setState];
@@ -731,13 +745,13 @@ export function useContext(key) {
 }
 
 export function reset() {
-  if (logEvents) console.log("resetting...");
-  i = 0;
-  idstates = {};
-  ieffect = 0;
-  iref = 0;
-  effects = [];
-  states = [];
+  // if (logEvents) console.log("resetting...");
+  // i = 0;
+  // idstates = {};
+  // ieffect = 0;
+  // iref = 0;
+  // effects = [];
+  // states = [];
 }
 
 let currentChildren = [];

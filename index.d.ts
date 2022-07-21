@@ -41,3 +41,4 @@ export declare function setTitle(title: string): void;
 export declare function useIDState<T>(id: string, initialValue: T): [T, (value: T|((value: T)=>T))=>void];
 export declare function useState<T>(initialValue: T): [T, (value: T|((value: T)=>T))=>void];
 export declare function h(tag: string, attributes: {events?: {[name:string]:any},[name:string]:any}, ...children: Array<string|VNode>);
+export declare function useEffect(callback: ()=>void, deps?: any|Array<any>): void;
