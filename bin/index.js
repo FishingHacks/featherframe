@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin / env node
+
 const { join } = require("path");
 const fs = require("fs/promises");
 const chalk = require("chalk");
@@ -120,17 +121,30 @@ if (argsObj.build) {
 } else if (argsObj.create) {
   if (typeof argsObj.create != "string")
     return console.error(chalk.redBright("ERR: No path supplied"));
-  if (!argsObj._args || !argsObj._args[0] || !argsObj._args[1])
-    return console.error(
-      chalk.redBright("ERR: No name and/or description provided")
-    );
   const path = join(process.cwd(), argsObj.create);
-  const name = argsObj._args[0];
-  const desc = argsObj._args[1];
   (async function () {
+    const { default: inquirer } = await import("inquirer");
+
+    var _name = argsObj._args?.[0];
+    var _desc = argsObj._args?.[1];
+
+    const prompts = [{ type: "confirm", name: "git", message: "Use git version control?", default: false }];
+
+    if (!_name || typeof _name !== "string") prompts.push({ type: "input", message: "name", name: "name", default: (_name && typeof _name === "string" ? _name : "") });
+    if (!_desc || typeof _desc !== "string") prompts.push({ type: "input", message: "description", name: "desc", default: (_desc && typeof _desc === "string" ? _desc : "") });
+
+    let { git, name, desc } = await inquirer.prompt(prompts);
+    
+    if (typeof name !== "string") return console.error("Name is not a string");
+    if (name.length < 3) return console.error("Name is less than 3 characters");
+
+    if (typeof desc !== "string") return console.error("Description is not a string");
+    if (desc.length < 3) return console.error("Description is less than 3 characters");
+    
+    if (debugprint) console.log("Initializing git repository:", git ? "active" : "inactive");
     try {
       await fs.mkdir(path);
-    } catch {}
+    } catch { }
     await fs.mkdir(join(path, "middleware"));
     await fs.mkdir(join(path, "pages"));
     await fs.mkdir(join(path, "pages/api"));
@@ -147,11 +161,11 @@ if (argsObj.build) {
       " */",
       "module.exports = (path)=>({",
       '    name: "' +
-        name.replaceAll('"', '\\"').replaceAll("\n", "\\n") +
-        '",',
+      name.replaceAll('"', '\\"').replaceAll("\n", "\\n") +
+      '",',
       '    description: "' +
-        desc.replaceAll('"', '\\"').replaceAll("\n", "\\n") +
-        '",',
+      desc.replaceAll('"', '\\"').replaceAll("\n", "\\n") +
+      '",',
       '    customHTML: require("fs").readFileSync(join(path, "index.html")).toString(),',
       '    e404page: require("fs").readFileSync(join(path, "404.html")).toString()',
       "});",
@@ -302,12 +316,18 @@ if (argsObj.build) {
     console.log(
       chalk.greenBright(
         'Your Project "' +
-          name +
-          '" in folder "' +
-          path.replace(process.cwd(), "").substring(1) +
-          "\" was successfully set up! Run 'npm install' to install all dependencies.\nRun the App with 'npm start'.\nPersonalize the package.json as you please"
+        name +
+        '" in folder "' +
+        path.replace(process.cwd(), "").substring(1) +
+        "\" was successfully set up! Run 'npm install' to install all dependencies.\nRun the App with 'npm start'.\nPersonalize the package.json as you please"
       )
     );
+    if (git) {
+      const { spawnSync } = require("child_process");
+      spawnSync("git init", { cwd: path, shell: true });
+      spawnSync("git add .", { cwd: path, shell: true });
+      spawnSync("git commit -m \"FF Initial Commit (featherframe create)\"", { cwd: path, shell: true });
+    }
   })();
 } else if (argsObj.help) {
   printHelp();
