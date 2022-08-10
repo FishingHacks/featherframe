@@ -1,4 +1,4 @@
-const logEvents = featherframeConfig?.logEvents || false;
+
 
 export {
   h,
@@ -11,14 +11,14 @@ export {
   useRef,
   useReducer,
   createContext,
-  VNode,
+  isValidVNode,
   useMemo,
   useFetch,
   useContext,
 } from "./engine";
 import htm from "https://unpkg.com/htm?module";
 import {
-  VNode,
+  isValidVNode,
   reset,
   h,
   render as r,
@@ -43,10 +43,10 @@ export function requireCSS(src) {
   document.head.append(link);
 }
 export function render(children = () => [], mnt = document.body) {
-  return r({
-    mnt,
+  return r(
     children,
-  });
+    mnt
+  );
 }
 export function requireScript(src, isModule = false) {
   let script = document.createElement("script");
@@ -96,8 +96,8 @@ export async function App({ path }) {
       .then((arr) =>
         arr instanceof Array
           ? arr.forEach((el) =>
-              el.regex && el.path ? FRONTEND_PGS.push(el) : null
-            )
+            el.regex && el.path ? FRONTEND_PGS.push(el) : null
+          )
           : null
       );
   try {
@@ -200,7 +200,7 @@ function errorPromise(err) {
 }
 
 const frameworkObject = {
-  VNode,
+  isValidVNode,
   h,
   rerender,
   useState,
@@ -258,7 +258,6 @@ function loadModule(modulepath, modulename) {
 }
 
 export function loadModules(modules = []) {
-  if (logEvents) console.log("loading modules", modules);
   let promises = modules.map((el) => loadModule(el));
   return new Promise((res) => {
     let unresolved = promises.length;
@@ -278,7 +277,6 @@ export function loadModules(modules = []) {
 }
 
 export function require(module) {
-  if (logEvents) console.log("trying to laod module", module.toString());
   if (!loadedModules[module])
     throw new Error("[ERR] module " + module + " wasn't yet loaded");
   return loadedModules[module];
@@ -311,8 +309,8 @@ export async function RouterLink(
       .then((arr) =>
         arr instanceof Array
           ? arr.forEach((el) =>
-              el.regex && el.path ? FRONTEND_PGS.push(el) : null
-            )
+            el.regex && el.path ? FRONTEND_PGS.push(el) : null
+          )
           : null
       );
   if (!href || typeof href != "string") href = false;

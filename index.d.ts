@@ -1,13 +1,9 @@
-export declare class VNode {
-    readonly tag: string;
-    render(xmlns?: string): HTMLElement;
-    addChild(children: VNode|string): void;
-    remChild(children: VNode|string): void;
-    setAttribute(name: string, value: string): void;
-    getAttribute(name: string): string;
+export declare interface VNode {
+    readonly tagName: string;
     readonly attributes: {[name: string]: any, events: {[name: string]: any}};
     readonly children: Array<VNode|string>;
     readonly name: string;
+    readonly uuid: string;
 }
 
 export declare function rerender(): void;
@@ -42,3 +38,4 @@ export declare function useIDState<T>(id: string, initialValue: T): [T, (value: 
 export declare function useState<T>(initialValue: T): [T, (value: T|((value: T)=>T))=>void];
 export declare function h(tag: string, attributes: {events?: {[name:string]:any},[name:string]:any}, ...children: Array<string|VNode>);
 export declare function useEffect(callback: ()=>void, deps?: any|Array<any>): void;
+export declare function isValidVNode(vnode: VNode | any): boolean;

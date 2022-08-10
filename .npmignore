@@ -1,3 +1,7 @@
 example/
 node_modules/
 error.html
+renderengine/engine.bak
+CONTRIBUTING.md
+SECURITY.md
+test.js
