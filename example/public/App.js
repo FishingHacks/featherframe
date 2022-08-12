@@ -7,3 +7,5 @@ import { render, html, App } from "/framework";
     <${App} />
     `, document.getElementById("root"));
 })();
+
+import("/engine").then(e => window.e = e);

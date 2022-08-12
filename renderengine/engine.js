@@ -73,7 +73,8 @@ const diffChildren = async (oldVChildren, newVChildren) => {
 
     return async $parent => {
         for (const [patch, child] of zip(childPatches, $parent.childNodes)) {
-            await patch(child);
+            if (!patch) $parent.removeChild(child);
+            else await patch(child);
         }
 
         for (const patch of additionalPatches) {
@@ -130,27 +131,36 @@ export const diff = async (vOldNode, vNewNode) => {
 // │                  │
 // └──────────────────┘
 
-export function flatArray(arr) {
-    if (!(arr instanceof Array)) return [arr];
-    let _arr = [...arr];
-    arr = [];
-    while (containsType(_arr, Array)) {
-        for (const item of _arr) {
-            if (item instanceof Array) arr.push(...item);
-            else arr.push(item);
-        }
-        _arr = [...arr];
-        arr = [];
-    }
-    return _arr;
-}
+// export function flatArray(arr) {
+//     if (!(arr instanceof Array)) return [arr];
+//     let _arr = [...arr];
+//     arr = [];
+//     while (containsType(_arr, Array)) {
+//         for (const item of _arr) {
+//             if (item instanceof Array) arr.push(...item);
+//             else arr.push(item);
+//         }
+//         _arr = [...arr];
+//         arr = [];
+//     }
+//     return _arr;
+// }
 
-function containsType(arr, type) {
-    for (const item of arr) {
-        if (typeof type === "string") { if (typeof item === type) return true; }
-        else if (item instanceof type) return true;
+function flatArray(childs) {
+    // make sure that flatArray changes at no time values in the original array, as it might be used later in execution
+    childs = childs instanceof Array ? [...childs] : [childs];
+
+    while (
+        childs.reduce((acc, val) => (val instanceof Array ? true : acc), false)
+    ) {
+        let newchilds = childs;
+        childs = [];
+
+        newchilds.forEach((el) =>
+            el instanceof Array ? childs.push(...el) : childs.push(el)
+        );
     }
-    return false;
+    return childs;
 }
 
 function getListener(name) {
@@ -206,7 +216,6 @@ export async function renderElement(vEl) {
     // - The description if the element is a symbol (Symbol("abc").description === "abc" = true)
     // - if the vEl is a string, function or bigint, return the return value of .toString() (bigint can't be serialized and function serialization fails for some reason...)
     // - otherwise return the serialized value of the type (JSON.stringify())
-
     if (typeof vEl.tagName === "function") { // Functional Components
         return await vEl.tagName(vEl.attrs, vEl.children)
     }
@@ -229,7 +238,6 @@ export async function renderElement(vEl) {
         await new Promise(r => setTimeout(r, 10));
         if ($child instanceof HTMLElement || $child instanceof Text) $el.append($child);
         else {
-            console.log($child, flatArray($child));
             vChilds.unshift(...flatArray($child));
         }
     }
@@ -282,7 +290,6 @@ export async function render(_child, app = document.body) {
     currentVDom = await transform(currentVDom);
     child = _child;
     root = await renderElement(currentVDom);
-    console.log(root);
     mount(root, app);
     rendering = false;
     return root;
@@ -290,37 +297,34 @@ export async function render(_child, app = document.body) {
 
 let rendering = false;
 
+function __deepCopyPS(obj) { return JSON.parse(JSON.stringify(obj)); }
+
 export async function rerender() {
     if (rendering) return;
     rendering = true;
     await new Promise(r => setTimeout(r, 30));
     await onRerender();
-    const app = await new Promise(async (resolve, reject) => {
-        let childReturnValue = null;
-        try {
-            childReturnValue = child()
-        } catch (e) { reject(e) };
-        if (childReturnValue instanceof Promise) childReturnValue.then(resolve).catch(reject);
-        else resolve(childReturnValue);
-    })
-        .then(app => (app instanceof Array) ? h("div", { ffautocreate: "root" }, ...app) : app)
-        .then(app => transform(app)) // In render(), this happens automatically. But because we make a few assumptions in the reconciler, we need to preprocess the vnode
-        .then(transformedApp =>
-            transformedApp instanceof Array
-                ? transformedApp[0]
-                : transformedApp)
-        .catch(console.error);
-    const patch = await diff(currentVDom, app);
-    root = await patch(root);
-    currentVDom = app;
+    try {
+        let untransformedDOM = await child();
+        if (untransformedDOM instanceof Array) untransformedDOM = h("div", { ffautocreate: "root" }, ...untransformedDOM);
+        let app = await transform(untransformedDOM);
+
+        const patch = await diff(currentVDom, app);
+        root = await patch(root);
+        currentVDom = app;
+    }
+    catch (e) { console.error(e) };
+
+    await onRerenderLate();
     rendering = false;
 }
 
 async function transform(vnode) {
+    if (vnode instanceof Array) return vnode;
     if (typeof vnode.tagName === "function") {
         return await vnode.tagName(vnode.attrs, flatArray(vnode.children));
     }
-    if (typeof vnode === "object" && vnode.tagName && vnode.children && vnode.attrs && vnode.uuid) {
+    if (typeof vnode === "object" && vnode.tagName && vnode.children && vnode.attrs && vnode.uuid && vnode.events) {
         const childs = flatArray(vnode.children); // DOES NOT WORK CORRECTLY
         const newChilds = [];
         while (childs.length > 0) {
@@ -333,6 +337,7 @@ async function transform(vnode) {
                 else console.error(el, "can't be rendered by the reconciler");
             }
         }
+
         return {
             tagName: vnode.tagName,
             attrs: vnode.attrs,
@@ -362,7 +367,24 @@ async function onRerender() {
     iref = 0;
     ieffect = 0;
     imemo = 0;
-    for (const listener of rerenderListeners) {
+    for (const listener of listeners.rerenderListeners) {
+        try {
+            await __try(listener);
+        }
+        catch (e) { }
+    }
+
+    effects = effects.map((el) => {
+        if (typeof el.func == "function" && el.changed) {
+            el.ret = el.func();
+            el.changed = false;
+        }
+        return el;
+    });
+}
+
+async function onRerenderLate() {
+    for (const listener of listeners.rerenderLateListeners) {
         try {
             await __try(listener);
         }
@@ -389,12 +411,16 @@ export function useState(initialValue) {
     return [states[index], setState];
 }
 
-const rerenderListeners = [];
+const listeners = {
+    rerenderListeners: [],
+    rerenderLateListeners: [],
+}
+const validListenerNames = ["rerender", "rerenderLate"];
 
 export function once(ev, listener) {
-    if (ev !== "rerender") return;
+    if (!validListenerNames.includes(ev)) return;
     if (typeof listener !== "function") return;
-    rerenderListeners.push(listener);
+    listeners[ev + "Listeners"].push(listener);
 }
 
 const idstates = {};
@@ -476,6 +502,10 @@ export function useEffect(func, to_change) {
 
 const refs = [];
 let iref = 0;
+
+export async function exec(cmd) {
+    return await eval(cmd);
+}
 
 export function useRef(stdobj) {
     // if (logEvents) console.log("using Reference");
