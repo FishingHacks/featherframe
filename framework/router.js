@@ -112,11 +112,11 @@ async function build(path, { debugprint }) {
         regex: el.path.match(/^\/index +$/)
           ? "^\\/$"
           : Object.values(el.path.replace(/index$/g, ""))
-              .map((el) =>
-                Object.values("*.(){}/\\[]+?").includes(el) ? "\\" + el : el
-              )
-              .join("")
-              .replaceAll(/:[^/]+/g, "[^/]+"),
+            .map((el) =>
+              Object.values("*.(){}/\\[]+?").includes(el) ? "\\" + el : el
+            )
+            .join("")
+            .replaceAll(/:[^/]+/g, "[^/]+"),
       });
     }
     pagesLeft.v--;
@@ -194,7 +194,6 @@ async function route(app, express, { debugprint }) {
       res.send(stdico_content);
     });
   }
-
   express.get("/engine", async (req, res) => {
     res.set({ "Content-Type": "application/javascript; charset=UTF-8" });
     res.send(engine_content);
@@ -265,10 +264,10 @@ async function route(app, express, { debugprint }) {
     if (!AVAILABLE_METHODS.includes(el.method))
       debugprint
         ? console.error(
-            redBright(
-              "The method " + el.method + " is not a valid HTTP method :<"
-            )
+          redBright(
+            "The method " + el.method + " is not a valid HTTP method :<"
           )
+        )
         : null;
     else {
       if (debugprint)
@@ -299,7 +298,7 @@ async function route(app, express, { debugprint }) {
             .replaceAll("%path", `/__featherframe/loader`)
             .replace(
               "%style",
-              "@font-face {\n  font-family: Poppins;\n  src: url(/__featherframe/font/font.ttf) format('truetype'),\n}\ndiv#FeatherFrameDevTools, div#FeatherFrameDevTools > * {\n  font-family: monospace;\n  font-size: 18px;\n    color: inherit;\n  padding: 10px;\n    display: flex;\n  flex-direction: row;\n}\ndiv#FeatherFrameDevTools {\nborder: 1px black solid;\nwidth: fit-content;\nmargin: 5px;\npadding: 0px;\nborder-radius: 10px;\n}span#FFDTFN{color: blue;font-style: italic;}"            )
+              "@font-face {\n  font-family: Poppins;\n  src: url(/__featherframe/font/font.ttf) format('truetype'),\n}\ndiv#FeatherFrameDevTools, div#FeatherFrameDevTools > * {\n  font-family: monospace;\n  font-size: 18px;\n    color: inherit;\n  padding: 10px;\n    display: flex;\n  flex-direction: row;\n}\ndiv#FeatherFrameDevTools {\nborder: 1px black solid;\nwidth: fit-content;\nmargin: 5px;\npadding: 0px;\nborder-radius: 10px;\n}span#FFDTFN{color: blue;font-style: italic;}")
         );
     };
     if (debugprint) console.log(`Registering ALL ${expressPath}`);

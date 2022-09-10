@@ -113,7 +113,6 @@ export const diff = async (vOldNode, vNewNode) => {
             return $newNode;
         };
     }
-
     const patchAttrs = await diffAttrs(vOldNode.attrs, vNewNode.attrs);
     const patchChildren = await diffChildren(vOldNode.children, vNewNode.children);
 
@@ -211,7 +210,7 @@ export function h(tagName, attrs = {}, ...children) {
     }
 }
 
-export async function renderElement(vEl) {
+export async function renderElement(vEl, xmlns = "") {
     if (!vEl.tagName || !vEl.attrs || !vEl.children) return document.createTextNode(typeof vEl === "symbol" ? vEl.description : (typeof vEl === "string" || typeof vEl === "bigint" || typeof vEl === "function") ? vEl.toString() : JSON.stringify(vEl)); // If the virtual Element does not contain all required attributes, return:
     // - The description if the element is a symbol (Symbol("abc").description === "abc" = true)
     // - if the vEl is a string, function or bigint, return the return value of .toString() (bigint can't be serialized and function serialization fails for some reason...)
@@ -219,10 +218,17 @@ export async function renderElement(vEl) {
     if (typeof vEl.tagName === "function") { // Functional Components
         return await vEl.tagName(vEl.attrs, vEl.children)
     }
-    const $el = document.createElement(vEl.tagName); // create a HTML Element corresponding to the type
+
+    
+    if (typeof vEl.attrs?.xmlns === "string") xmlns = vEl.attrs.xmlns;
+    
+    
+    const $el = (xmlns
+        ? document.createElementNS(xmlns, vEl.tagName)
+        : document.createElement(vEl.tagName)); // create a HTML Element corresponding to the type
 
     for (const [k, v] of Object.entries(vEl.attrs)) {
-        if (k === "ref" && v.current) v.current = $el;
+        if (k === "ref") v.current = $el;
         else $el.setAttribute(k, v);
     }
     for (const [name, listener] of Object.entries(vEl.events)) {
@@ -234,10 +240,10 @@ export async function renderElement(vEl) {
     const vChilds = flatArray(vEl.children);
     while (vChilds.length > 0) {
         const vChild = vChilds.shift();
-        const $child = await renderElement(vChild);
+        const $child = (vChild ? await renderElement(vChild, xmlns) : null);
         await new Promise(r => setTimeout(r, 10));
-        if ($child instanceof HTMLElement || $child instanceof Text) $el.append($child);
-        else {
+        if ($child instanceof Element || $child instanceof Text) $el.append($child);
+        else if($child instanceof Array) {
             vChilds.unshift(...flatArray($child));
         }
     }
@@ -286,18 +292,23 @@ export async function render(_child, app = document.body) {
     await new Promise(r => setTimeout(r, 30));
     await awaitLoad();
     currentVDom = await _child();
-    if (currentVDom instanceof Array) currentVDom = h("div", { ffautocreate: "root" }, ...currentVDom);
+    if (currentVDom instanceof Array) currentVDom = h("div", { ffautocreate: "root" }, ...flatArray(currentVDom));
     currentVDom = await transform(currentVDom);
+    if (currentVDom instanceof Array) currentVDom = h("div", { ffautocreate: "root" }, ...flatArray(currentVDom));
+    currentVDom.children = flatArray(currentVDom.children)
     child = _child;
     root = await renderElement(currentVDom);
     mount(root, app);
+
+    await executeEffects(); 
+
+    console.log(currentVDom)
+
     rendering = false;
     return root;
 }
 
 let rendering = false;
-
-function __deepCopyPS(obj) { return JSON.parse(JSON.stringify(obj)); }
 
 export async function rerender() {
     if (rendering) return;
@@ -306,9 +317,11 @@ export async function rerender() {
     await onRerender();
     try {
         let untransformedDOM = await child();
-        if (untransformedDOM instanceof Array) untransformedDOM = h("div", { ffautocreate: "root" }, ...untransformedDOM);
+        if (untransformedDOM instanceof Array) untransformedDOM = h("div", { ffautocreate: "root" }, ...flatArray(untransformedDOM));
         let app = await transform(untransformedDOM);
-
+        if (app instanceof Array) app = h("div", { ffautocreate: "root" }, ...flatArray(app));
+        // app.children = flatArray(app.children);
+        console.log(app);
         const patch = await diff(currentVDom, app);
         root = await patch(root);
         currentVDom = app;
@@ -320,23 +333,38 @@ export async function rerender() {
 }
 
 async function transform(vnode) {
-    if (vnode instanceof Array) return vnode;
+    if (vnode === undefined || vnode === null) return null;
+    if (vnode instanceof Array) {
+        let _newArr = [];
+        for (const node of flatArray(vnode)) {
+            if (node !== undefined && node !== null) _newArr.push(await transform(node));
+        }
+        return _newArr;
+    }
     if (typeof vnode.tagName === "function") {
-        return await vnode.tagName(vnode.attrs, flatArray(vnode.children));
+        return await transform(await vnode.tagName(vnode.attrs, flatArray(vnode.children)));
     }
     if (typeof vnode === "object" && vnode.tagName && vnode.children && vnode.attrs && vnode.uuid && vnode.events) {
         const childs = flatArray(vnode.children); // DOES NOT WORK CORRECTLY
         const newChilds = [];
         while (childs.length > 0) {
             const rawEl = childs.shift();
-            if (rawEl instanceof Array) childs.unshift(...rawEl);
+            if (rawEl === undefined || rawEl === null) {}
+            if (rawEl instanceof Array) childs.unshift(...flatArray(rawEl));
             else {
                 const el = await transform(rawEl);
-                if (el instanceof Array) childs.unshift(...el);
-                else if (typeof el === "string" || (typeof el === "object" && el.attrs && el.children && el.tagName)) newChilds.push(el);
-                else console.error(el, "can't be rendered by the reconciler");
+                if (el instanceof Array) childs.unshift(...flatArray(el));
+                else if (typeof el === "string" || (el !== null && typeof el === "object" && el.attrs && el.children && el.tagName)) newChilds.push(el);
+                else if (el !== null && el !== undefined) newChilds.push((typeof el === "string"
+                || typeof el === "bigint")
+                ? el.toString()
+                : typeof el === "symbol"
+                    ? el.description
+                    : JSON.stringify(el));
             }
         }
+
+        console.log(newChilds.map(el => el instanceof Array).includes(true));
 
         return {
             tagName: vnode.tagName,
@@ -374,13 +402,7 @@ async function onRerender() {
         catch (e) { }
     }
 
-    effects = effects.map((el) => {
-        if (typeof el.func == "function" && el.changed) {
-            el.ret = el.func();
-            el.changed = false;
-        }
-        return el;
-    });
+    await executeEffects();
 }
 
 async function onRerenderLate() {
@@ -498,6 +520,16 @@ export function useEffect(func, to_change) {
         effects[ieffect].func = func;
     }
     ieffect++;
+}
+
+async function executeEffects() {
+    effects = effects.map((el) => {
+        if (typeof el.func == "function" && el.changed) {
+            el.ret = el.func();
+            el.changed = false;
+        }
+        return el;
+    });
 }
 
 const refs = [];
