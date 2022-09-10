@@ -92,3 +92,19 @@ Bugfixes:
 
 ## 1.3.0
 Additions: SPA Support
+
+## 1.3.1
+Added useFetch, server can now be require from /server in the featherframe package
+
+## 1.3.2
+- improved cli
+- fixed bugs
+
+## 1.4.0
+- Added a Reconciler
+- better CLI
+- Bugfixes
+
+## 1.5.0
+- Bugfixes
+- Finished off Reconciler
