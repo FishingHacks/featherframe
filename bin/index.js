@@ -1,4 +1,4 @@
-#!/usr/bin / env node
+#!/usr/bin/env node
 
 const { join } = require("path");
 const fs = require("fs/promises");
