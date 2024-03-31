@@ -1,5 +1,21 @@
-import htm from "https://unpkg.com/htm?module";
+import htm from 'https://unpkg.com/htm?module';
 
+if (!globalThis.logEvents) globalThis.logEvents = false;
+
+/**
+ *
+ * @param {keyof Console} weight
+ * @param {string} text
+ * @param {any[]} args
+ */
+function log(weight, text, ...args) {
+    console[weight](
+        '%c[featherframe/engine]%c ' + text,
+        'color: #d946ef; font-weight: bold',
+        'all: reset',
+        ...args
+    );
+}
 
 // ┌────────────────┐
 // │                │
@@ -35,8 +51,8 @@ const diffAttrs = async (oldAttrs, newAttrs) => {
 
     // set new attributes
     for (const [k, v] of Object.entries(newAttrs)) {
-        patches.push($node => {
-            if (k === "ref") v.current = $node;
+        patches.push(($node) => {
+            if (k === 'ref') v.current = $node;
             else $node.setAttribute(k, v);
             return $node;
         });
@@ -45,14 +61,14 @@ const diffAttrs = async (oldAttrs, newAttrs) => {
     // remove old attributes
     for (const k in oldAttrs) {
         if (!(k in newAttrs)) {
-            patches.push($node => {
+            patches.push(($node) => {
                 $node.removeAttribute(k);
                 return $node;
             });
         }
     }
 
-    return async $node => {
+    return async ($node) => {
         for (const patch of patches) {
             await patch($node);
         }
@@ -61,17 +77,18 @@ const diffAttrs = async (oldAttrs, newAttrs) => {
 
 const diffChildren = async (oldVChildren, newVChildren) => {
     const childPatches = [];
-    for (const i in oldVChildren) childPatches.push(await diff(oldVChildren[i], newVChildren[i]));
+    for (const i in oldVChildren)
+        childPatches.push(await diff(oldVChildren[i], newVChildren[i]));
 
     const additionalPatches = [];
     for (const additionalVChild of newVChildren.slice(oldVChildren.length)) {
-        additionalPatches.push(async $node => {
+        additionalPatches.push(async ($node) => {
             $node.appendChild(await renderElement(additionalVChild));
             return $node;
         });
     }
 
-    return async $parent => {
+    return async ($parent) => {
         for (const [patch, child] of zip(childPatches, $parent.childNodes)) {
             if (!patch) $parent.removeChild(child);
             else await patch(child);
@@ -87,36 +104,38 @@ const diffChildren = async (oldVChildren, newVChildren) => {
 
 export const diff = async (vOldNode, vNewNode) => {
     if (vNewNode === undefined) {
-        return async $node => {
+        return async ($node) => {
             $node.remove();
             return undefined;
         };
     }
 
-    if (typeof vOldNode === 'string' ||
-        typeof vNewNode === 'string') {
+    if (typeof vOldNode === 'string' || typeof vNewNode === 'string') {
         if (vOldNode !== vNewNode) {
-            return async $node => {
+            return async ($node) => {
                 const $newNode = await renderElement(vNewNode);
                 $node.replaceWith($newNode);
                 return $newNode;
             };
         } else {
-            return $node => undefined;
+            return ($node) => undefined;
         }
     }
 
     if (vOldNode.tagName !== vNewNode.tagName) {
-        return async $node => {
+        return async ($node) => {
             const $newNode = await renderElement(vNewNode);
             $node.replaceWith($newNode);
             return $newNode;
         };
     }
     const patchAttrs = await diffAttrs(vOldNode.attrs, vNewNode.attrs);
-    const patchChildren = await diffChildren(vOldNode.children, vNewNode.children);
+    const patchChildren = await diffChildren(
+        vOldNode.children,
+        vNewNode.children
+    );
 
-    return async $node => {
+    return async ($node) => {
         $node.__ffuuid__ = vNewNode.uuid;
         await patchAttrs($node);
         await patchChildren($node);
@@ -165,27 +184,48 @@ function flatArray(childs) {
 function getListener(name) {
     function listener(e, ...args) {
         try {
-            if (!e?.path) return console.error(e, "doesn't contain a path property, which is necessary in order to execute the event handler correctly");
+            if (!e?.path)
+                return log(
+                    'error',
+                    "%s doesn't contain a path property, which is necessary in order to execute the event handler correctly",
+                    e
+                );
             const node = e.path[0];
-            if (!node) return console.error(node, "is not existent. Does the event contain a valid path attribute?", e);
+            if (!node)
+                return log(
+                    'error',
+                    '%s is not existent. Does the event contain a valid path attribute? %s',
+                    node,
+                    e
+                );
             const UUID = node.__ffuuid__;
-            if (!UUID) return console.error("Something went wrong during rendering. Event handler", name, "can't be executed");
+            if (!UUID)
+                return log(
+                    'error',
+                    "Something went wrong during rendering. Event handler %s can't be executed",
+                    name
+                );
             const vNode = getElementByUUID(UUID);
-            if (!vNode) return console.error("Internal UUID is not up-to-date. An rerender should fix this");
+            if (!vNode)
+                return log(
+                    'error',
+                    'Internal UUID is not up-to-date. An rerender should fix this'
+                );
             if (!vNode.events[name]) return; // do nothing if the handler does not exist, as we don't clear unused handlers
             const handler = vNode.events[name];
-            if (typeof handler !== "function") return console.error("Handler", handler, "is not a function");
+            if (typeof handler !== 'function')
+                return log('error', 'Handler %s is not a function', handler);
             const _retValue = handler();
-            if (_retValue instanceof Promise) _retValue.catch(console.error).then(() => { });
+            if (_retValue instanceof Promise)
+                _retValue.catch(log.bind(this, 'error')).then(() => {});
             else return _retValue;
-        }
-        catch (e) {
+        } catch (e) {
             // Remove this function from the stacktrace
-            let stackArray = e.stack?.split("\n");
+            let stackArray = e.stack?.split('\n');
             stackArray?.pop?.();
-            const stacktrace = stackArray?.join?.("\n");
+            const stacktrace = stackArray?.join?.('\n');
 
-            console.error("Uncaught" + (stacktrace || e.name || "Error"));
+            log('error', 'Uncaught %s', stacktrace || e.name || 'Error');
         }
     }
 
@@ -193,12 +233,19 @@ function getListener(name) {
 }
 
 export function h(tagName, attrs = {}, ...children) {
-    if (typeof attrs != "object" || attrs === null) attrs = {};
-    if (!tagName || !["string", "function"].includes(typeof tagName)) throw new Error(tagName.toString() + " can't be a tag");
+    if (typeof attrs != 'object' || attrs === null) attrs = {};
+    if (!tagName || !['string', 'function'].includes(typeof tagName))
+        throw new Error(tagName.toString() + " can't be a tag");
     const attributes = {};
     const events = {};
     for (const [k, v] of Object.entries(attrs)) {
-        if (k.startsWith("on") && typeof v === "function" && typeof tagName !== "function" && k.length > 2) events[k.substring(2)] = v;
+        if (
+            k.startsWith('on') &&
+            typeof v === 'function' &&
+            typeof tagName !== 'function' &&
+            k.length > 2
+        )
+            events[k.substring(2)] = v;
         else attributes[k] = v;
     }
     return {
@@ -206,29 +253,37 @@ export function h(tagName, attrs = {}, ...children) {
         tagName,
         attrs: attributes,
         children,
-        events
-    }
+        events,
+    };
 }
 
-export async function renderElement(vEl, xmlns = "") {
-    if (!vEl.tagName || !vEl.attrs || !vEl.children) return document.createTextNode(typeof vEl === "symbol" ? vEl.description : (typeof vEl === "string" || typeof vEl === "bigint" || typeof vEl === "function") ? vEl.toString() : JSON.stringify(vEl)); // If the virtual Element does not contain all required attributes, return:
+export async function renderElement(vEl, xmlns = '') {
+    if (!vEl.tagName || !vEl.attrs || !vEl.children)
+        return document.createTextNode(
+            typeof vEl === 'symbol'
+                ? vEl.description
+                : typeof vEl === 'string' ||
+                  typeof vEl === 'bigint' ||
+                  typeof vEl === 'function'
+                ? vEl.toString()
+                : JSON.stringify(vEl)
+        ); // If the virtual Element does not contain all required attributes, return:
     // - The description if the element is a symbol (Symbol("abc").description === "abc" = true)
     // - if the vEl is a string, function or bigint, return the return value of .toString() (bigint can't be serialized and function serialization fails for some reason...)
     // - otherwise return the serialized value of the type (JSON.stringify())
-    if (typeof vEl.tagName === "function") { // Functional Components
-        return await vEl.tagName(vEl.attrs, vEl.children)
+    if (typeof vEl.tagName === 'function') {
+        // Functional Components
+        return await vEl.tagName(vEl.attrs, vEl.children);
     }
 
-    
-    if (typeof vEl.attrs?.xmlns === "string") xmlns = vEl.attrs.xmlns;
-    
-    
-    const $el = (xmlns
+    if (typeof vEl.attrs?.xmlns === 'string') xmlns = vEl.attrs.xmlns;
+
+    const $el = xmlns
         ? document.createElementNS(xmlns, vEl.tagName)
-        : document.createElement(vEl.tagName)); // create a HTML Element corresponding to the type
+        : document.createElement(vEl.tagName); // create a HTML Element corresponding to the type
 
     for (const [k, v] of Object.entries(vEl.attrs)) {
-        if (k === "ref") v.current = $el;
+        if (k === 'ref') v.current = $el;
         else $el.setAttribute(k, v);
     }
     for (const [name, listener] of Object.entries(vEl.events)) {
@@ -240,10 +295,11 @@ export async function renderElement(vEl, xmlns = "") {
     const vChilds = flatArray(vEl.children);
     while (vChilds.length > 0) {
         const vChild = vChilds.shift();
-        const $child = (vChild ? await renderElement(vChild, xmlns) : null);
-        await new Promise(r => setTimeout(r, 10));
-        if ($child instanceof Element || $child instanceof Text) $el.append($child);
-        else if($child instanceof Array) {
+        const $child = vChild ? await renderElement(vChild, xmlns) : null;
+        await new Promise((r) => setTimeout(r, 10));
+        if ($child instanceof Element || $child instanceof Text)
+            $el.append($child);
+        else if ($child instanceof Array) {
             vChilds.unshift(...flatArray($child));
         }
     }
@@ -256,53 +312,68 @@ let root = undefined;
 let child = undefined;
 
 export function getVDom() {
-    if (!currentVDom || !exist(currentVDom) || !child || !exist(child)) return null;
+    if (!currentVDom || !exist(currentVDom) || !child || !exist(child))
+        return null;
     return currentVDom;
 }
 
 export function getElementByUUID(uuid) {
-    if (!currentVDom || currentVDom === undefined || currentVDom === null) return null;
+    if (!currentVDom || currentVDom === undefined || currentVDom === null)
+        return null;
     return __getElementByUUID(uuid, currentVDom);
 }
 
 function __getElementByUUID(uuid, elements) {
-    if (!uuid || uuid === undefined || uuid === null || !uuid.toString) return null;
+    if (!uuid || uuid === undefined || uuid === null || !uuid.toString)
+        return null;
     uuid = uuid.toString();
     elements = flatArray(elements);
     for (const vNode of elements) {
-        if (typeof vNode === "object") {
+        if (typeof vNode === 'object') {
             if (vNode.uuid === uuid) return vNode;
-            const res = (vNode.children && vNode.children !== undefined) ? __getElementByUUID(uuid, vNode.children) : null;
-            if (res !== null && res != undefined && typeof res === "object") return res;
+            const res =
+                vNode.children && vNode.children !== undefined
+                    ? __getElementByUUID(uuid, vNode.children)
+                    : null;
+            if (res !== null && res != undefined && typeof res === 'object')
+                return res;
         }
     }
     return null;
 }
 
 function awaitLoad() {
-    return new Promise(r => {
+    return new Promise((r) => {
         if (document.body instanceof HTMLElement) return r();
-        addEventListener("load", r);
-    })
+        addEventListener('load', r);
+    });
 }
 
 export async function render(_child, app = document.body) {
     if (rendering) return;
     rendering = true;
-    await new Promise(r => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 30));
     await awaitLoad();
     currentVDom = await _child();
-    if (currentVDom instanceof Array) currentVDom = h("div", { ffautocreate: "root" }, ...flatArray(currentVDom));
+    if (currentVDom instanceof Array)
+        currentVDom = h(
+            'div',
+            { ffautocreate: 'root' },
+            ...flatArray(currentVDom)
+        );
     currentVDom = await transform(currentVDom);
-    if (currentVDom instanceof Array) currentVDom = h("div", { ffautocreate: "root" }, ...flatArray(currentVDom));
-    currentVDom.children = flatArray(currentVDom.children)
+    if (currentVDom instanceof Array)
+        currentVDom = h(
+            'div',
+            { ffautocreate: 'root' },
+            ...flatArray(currentVDom)
+        );
+    currentVDom.children = flatArray(currentVDom.children);
     child = _child;
     root = await renderElement(currentVDom);
     mount(root, app);
 
-    await executeEffects(); 
-
-    console.log(currentVDom)
+    await executeEffects();
 
     rendering = false;
     return root;
@@ -313,20 +384,26 @@ let rendering = false;
 export async function rerender() {
     if (rendering) return;
     rendering = true;
-    await new Promise(r => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 30));
     await onRerender();
     try {
         let untransformedDOM = await child();
-        if (untransformedDOM instanceof Array) untransformedDOM = h("div", { ffautocreate: "root" }, ...flatArray(untransformedDOM));
+        if (untransformedDOM instanceof Array)
+            untransformedDOM = h(
+                'div',
+                { ffautocreate: 'root' },
+                ...flatArray(untransformedDOM)
+            );
         let app = await transform(untransformedDOM);
-        if (app instanceof Array) app = h("div", { ffautocreate: "root" }, ...flatArray(app));
+        if (app instanceof Array)
+            app = h('div', { ffautocreate: 'root' }, ...flatArray(app));
         // app.children = flatArray(app.children);
-        console.log(app);
         const patch = await diff(currentVDom, app);
         root = await patch(root);
         currentVDom = app;
+    } catch (e) {
+        log('error', '%s', e);
     }
-    catch (e) { console.error(e) };
 
     await onRerenderLate();
     rendering = false;
@@ -337,34 +414,53 @@ async function transform(vnode) {
     if (vnode instanceof Array) {
         let _newArr = [];
         for (const node of flatArray(vnode)) {
-            if (node !== undefined && node !== null) _newArr.push(await transform(node));
+            if (node !== undefined && node !== null)
+                _newArr.push(await transform(node));
         }
         return _newArr;
     }
-    if (typeof vnode.tagName === "function") {
-        return await transform(await vnode.tagName(vnode.attrs, flatArray(vnode.children)));
+    if (typeof vnode.tagName === 'function') {
+        return await transform(
+            await vnode.tagName(vnode.attrs, flatArray(vnode.children))
+        );
     }
-    if (typeof vnode === "object" && vnode.tagName && vnode.children && vnode.attrs && vnode.uuid && vnode.events) {
+    if (
+        typeof vnode === 'object' &&
+        vnode.tagName &&
+        vnode.children &&
+        vnode.attrs &&
+        vnode.uuid &&
+        vnode.events
+    ) {
         const childs = flatArray(vnode.children); // DOES NOT WORK CORRECTLY
         const newChilds = [];
         while (childs.length > 0) {
             const rawEl = childs.shift();
-            if (rawEl === undefined || rawEl === null) {}
+            if (rawEl === undefined || rawEl === null) {
+            }
             if (rawEl instanceof Array) childs.unshift(...flatArray(rawEl));
             else {
                 const el = await transform(rawEl);
                 if (el instanceof Array) childs.unshift(...flatArray(el));
-                else if (typeof el === "string" || (el !== null && typeof el === "object" && el.attrs && el.children && el.tagName)) newChilds.push(el);
-                else if (el !== null && el !== undefined) newChilds.push((typeof el === "string"
-                || typeof el === "bigint")
-                ? el.toString()
-                : typeof el === "symbol"
-                    ? el.description
-                    : JSON.stringify(el));
+                else if (
+                    typeof el === 'string' ||
+                    (el !== null &&
+                        typeof el === 'object' &&
+                        el.attrs &&
+                        el.children &&
+                        el.tagName)
+                )
+                    newChilds.push(el);
+                else if (el !== null && el !== undefined)
+                    newChilds.push(
+                        typeof el === 'string' || typeof el === 'bigint'
+                            ? el.toString()
+                            : typeof el === 'symbol'
+                            ? el.description
+                            : JSON.stringify(el)
+                    );
             }
         }
-
-        console.log(newChilds.map(el => el instanceof Array).includes(true));
 
         return {
             tagName: vnode.tagName,
@@ -373,22 +469,19 @@ async function transform(vnode) {
             events: vnode.events,
             uuid: vnode.uuid,
         };
-    }
-    else {
-        return (typeof vnode === "string"
-            || typeof vnode === "bigint")
+    } else {
+        return typeof vnode === 'string' || typeof vnode === 'bigint'
             ? vnode.toString()
-            : typeof vnode === "symbol"
-                ? vnode.description
-                : JSON.stringify(vnode);
+            : typeof vnode === 'symbol'
+            ? vnode.description
+            : JSON.stringify(vnode);
     }
 }
-
 
 export const html = htm.bind(h);
 
 let i = 0;
-const states = [];
+let states = [];
 
 async function onRerender() {
     i = 0;
@@ -398,8 +491,7 @@ async function onRerender() {
     for (const listener of listeners.rerenderListeners) {
         try {
             await __try(listener);
-        }
-        catch (e) { }
+        } catch (e) {}
     }
 
     await executeEffects();
@@ -409,13 +501,16 @@ async function onRerenderLate() {
     for (const listener of listeners.rerenderLateListeners) {
         try {
             await __try(listener);
-        }
-        catch (e) { }
+        } catch (e) {}
     }
 }
 
 async function __try(f) {
-    try { return await f(); } catch (e) { return e; }
+    try {
+        return await f();
+    } catch (e) {
+        return e;
+    }
 }
 
 export function useState(initialValue) {
@@ -424,7 +519,7 @@ export function useState(initialValue) {
     if (states[index] === undefined) states[index] = initialValue;
 
     function setState(state) {
-        if (typeof state === "function") state = state(states[index]);
+        if (typeof state === 'function') state = state(states[index]);
         if (states[index] === state) return;
         states[index] = state;
         rerender();
@@ -436,16 +531,16 @@ export function useState(initialValue) {
 const listeners = {
     rerenderListeners: [],
     rerenderLateListeners: [],
-}
-const validListenerNames = ["rerender", "rerenderLate"];
+};
+const validListenerNames = ['rerender', 'rerenderLate'];
 
 export function once(ev, listener) {
     if (!validListenerNames.includes(ev)) return;
-    if (typeof listener !== "function") return;
-    listeners[ev + "Listeners"].push(listener);
+    if (typeof listener !== 'function') return;
+    listeners[ev + 'Listeners'].push(listener);
 }
 
-const idstates = {};
+let idstates = {};
 
 /**
  *
@@ -454,11 +549,12 @@ const idstates = {};
  * @returns {[T, (val: T)=>void]}
  */
 export function useIDState(id, stdval) {
-    // if (logEvents) console.log("using State with id", id);
-    if (idstates[id] == null || idstates[id] == undefined) idstates[id] = stdval;
+    if (logEvents) log('log', 'using State with id %s', id);
+    if (idstates[id] == null || idstates[id] == undefined)
+        idstates[id] = stdval;
 
     function setState(val) {
-        if (typeof val == "function") val = val(idstates[id]);
+        if (typeof val == 'function') val = val(idstates[id]);
         idstates[id] = val;
         if (!rendering) rerender();
     }
@@ -485,7 +581,7 @@ let effects = [];
 let ieffect = 0;
 
 export function useEffect(func, to_change) {
-    // if (logEvents) console.log("using Effect");
+    if (logEvents) log('log', 'using Effect');
     if (effects[ieffect] == null || effects[ieffect] == undefined) {
         effects[ieffect] = {
             func: func,
@@ -524,7 +620,7 @@ export function useEffect(func, to_change) {
 
 async function executeEffects() {
     effects = effects.map((el) => {
-        if (typeof el.func == "function" && el.changed) {
+        if (typeof el.func == 'function' && el.changed) {
             el.ret = el.func();
             el.changed = false;
         }
@@ -540,7 +636,7 @@ export async function exec(cmd) {
 }
 
 export function useRef(stdobj) {
-    // if (logEvents) console.log("using Reference");
+    if (logEvents) log('log', 'using Reference');
     if (refs[iref] == null || refs[iref] == undefined) {
         refs[iref] = {
             current: stdobj,
@@ -551,19 +647,19 @@ export function useRef(stdobj) {
 }
 
 /**
-*
-* @param {(T, any)=>T} reducer get's called, when dispatch is called with the action and the current state
-* @param {T} initialValue the initial Value
-* @returns {[T, (any)=>void]} the State and the dispatch function
-*/
+ *
+ * @param {(T, any)=>T} reducer get's called, when dispatch is called with the action and the current state
+ * @param {T} initialValue the initial Value
+ * @returns {[T, (any)=>void]} the State and the dispatch function
+ */
 export function useReducer(reducer, initialValue) {
-    // if (logEvents) console.log("new reducer created with value", initialValue);
+    if (logEvents) log('log', 'new reducer created with value', initialValue);
     const [state, setState] = useState(initialValue);
 
     function dispatch(action) {
         const newState = reducer(state, action);
         if (newState == state) return;
-        else if (typeof newState == "object" && typeof state == "object") {
+        else if (typeof newState == 'object' && typeof state == 'object') {
             const nsK = Object.keys(newState);
             const nsV = Object.values(newState);
             const sK = Object.keys(state);
@@ -590,7 +686,7 @@ const contexts = {};
  * @param {string} key the key of the context
  */
 export function createContext(el, key) {
-    // if (logEvents) console.log("Creating context", key, "with", el);
+    if (logEvents) log('log', 'Creating context %s with %s', key, el);
     contexts[key] = el;
 }
 
@@ -599,25 +695,35 @@ export function createContext(el, key) {
  * @returns {any} the value set for the context
  */
 export function useContext(key) {
-    // if (logEvents) console.log("using context", key);
+    if (logEvents) log('log', 'using context %s', key);
     return contexts[key];
 }
 
 export function reset() {
-    // if (logEvents) console.log("resetting...");
-    // i = 0;
-    // idstates = {};
-    // ieffect = 0;
-    // iref = 0;
-    // effects = [];
-    // states = [];
+    if (logEvents) log('log', 'resetting...');
+    i = 0;
+    idstates = {};
+    ieffect = 0;
+    iref = 0;
+    effects = [];
+    states = [];
+    const reset_action_nodes = document.querySelectorAll('[ff-reset-action]');
+
+    for (let i = 0; i < reset_action_nodes.length; ++i) {
+        const reset_action =
+            reset_action_nodes[i].getAttribute('ff-reset-action');
+
+        if (reset_action == 'delete') reset_action_nodes[i].remove();
+        else {
+        }
+    }
 }
 
 const memos = [];
 let imemo = 0;
 
 export function useMemo(func, deps) {
-    if (typeof func != "function") return undefined;
+    if (typeof func != 'function') return undefined;
     const index = imemo;
     imemo++;
     if (memos[index] == undefined)
@@ -629,7 +735,8 @@ export function useMemo(func, deps) {
         let is_eq = true;
         if (memos[index].lastdeps instanceof Array) {
             const lastdeps = memos[index].lastdeps;
-            for (const i in lastdeps) lastdeps[i] == deps[i] ? null : (is_eq = false);
+            for (const i in lastdeps)
+                lastdeps[i] == deps[i] ? null : (is_eq = false);
         } else is_eq = deps == memos[index].lastdeps;
 
         if (!is_eq)
@@ -661,31 +768,33 @@ export function useFetch(url, parameters) {
         data.loading = true;
         data.error = null;
         if (!data?.parameters?.keep) data.data = null;
-        data.request = fetch(data.url, data.parameters).then(async (response) => {
-            if (!response.ok)
-                return setData((data) => ({
-                    ...data,
-                    data: null,
-                    error: true,
-                    loading: false,
+        data.request = fetch(data.url, data.parameters).then(
+            async (response) => {
+                if (!response.ok)
+                    return setData((data) => ({
+                        ...data,
+                        data: null,
+                        error: true,
+                        loading: false,
+                        request: null,
+                    }));
+                let data = await response.text();
+                if (
+                    (data.startsWith('{') && data.endsWith('}')) ||
+                    (data.startsWith('[') && data.endsWith(']'))
+                )
+                    try {
+                        data = JSON.parse(data);
+                    } catch {}
+                setData((oldData) => ({
+                    ...oldData,
                     request: null,
+                    error: false,
+                    loading: false,
+                    data,
                 }));
-            let data = await response.text();
-            if (
-                (data.startsWith("{") && data.endsWith("}")) ||
-                (data.startsWith("[") && data.endsWith("]"))
-            )
-                try {
-                    data = JSON.parse(data);
-                } catch { }
-            setData((oldData) => ({
-                ...oldData,
-                request: null,
-                error: false,
-                loading: false,
-                data,
-            }));
-        });
+            }
+        );
     }
 
     data.valid = true;
@@ -719,45 +828,60 @@ export function useFetch(url, parameters) {
 }
 
 function publicRepresent() {
-    if (!currentVDom || currentVDom === null || currentVDom === undefined) return "";
+    if (!currentVDom || currentVDom === null || currentVDom === undefined)
+        return '';
     return __representVDom(currentVDom);
 }
 
-function __representVDom(elements, pref = "") {
+function __representVDom(elements, pref = '') {
     elements = flatArray(elements);
-    let str = "";
+    let str = '';
     for (const el of elements) {
-        if (typeof el !== "object") str += pref + el.toString();
-        str += `${pref}<${el.tagName.replaceAll("<", "\\<").replaceAll(">", "\\>").replaceAll("/", "\\/")} />\n${__representVDom((el.children || []), pref + "  ")}`;
+        if (typeof el !== 'object') str += pref + el.toString();
+        str += `${pref}<${el.tagName
+            .replaceAll('<', '\\<')
+            .replaceAll('>', '\\>')
+            .replaceAll('/', '\\/')} />\n${__representVDom(
+            el.children || [],
+            pref + '  '
+        )}`;
     }
     str.substring(0, str.length - 1);
     return str;
 }
 
-export function represent() { return publicRepresent(); }
+export function represent() {
+    return publicRepresent();
+}
 
 window.__featherframe__ = {
     represent: publicRepresent,
-}
+};
 
 export function isValidVNode(vnode) {
     return (
-        exist(vnode.tagName)
-        && isStr(vnode.tagName)
-        && exist(vnode.children)
-        && exist(vnode.uuid)
-        && isStr(vnode.uuid)
-        && exist(vnode.attrs)
-        && isObj(vnode.attrs)
-        && exist(vnode.events)
-        && isObj(vnode.events)
+        exist(vnode.tagName) &&
+        isStr(vnode.tagName) &&
+        exist(vnode.children) &&
+        exist(vnode.uuid) &&
+        isStr(vnode.uuid) &&
+        exist(vnode.attrs) &&
+        isObj(vnode.attrs) &&
+        exist(vnode.events) &&
+        isObj(vnode.events)
     );
 }
 
-function isStr(val) { return typeof val === "string" }
-function isObj(val) { return typeof val === "object" }
-function exist(val) { return (val !== undefined && val !== null); }
+function isStr(val) {
+    return typeof val === 'string';
+}
+function isObj(val) {
+    return typeof val === 'object';
+}
+function exist(val) {
+    return val !== undefined && val !== null;
+}
 
 export function getFuncName(f) {
-    return f.name || "anonymous";
+    return f.name || 'anonymous';
 }
