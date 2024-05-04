@@ -49,7 +49,7 @@ Visit the [Wiki](https://www.github.com/FishingHacks/featherframe/wiki) to view 
 "featherframecreatepage": {
 	"prefix": "ffcreatepage",
 	"body": [
-		"const { html } = require(\"feahterframe\");",
+		"const { html } = require(\"featherframe\");",
 		"",
 		"export async function render() {",
 		"",
@@ -108,3 +108,11 @@ Added useFetch, server can now be require from /server in the featherframe packa
 ## 1.5.0
 - Bugfixes
 - Finished off Reconciler
+
+## 1.5.1
+- Bugfixes
+- Better require
+- Better logging
+
+## 1.5.3
+- Featherframe Devtools

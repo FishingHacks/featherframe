@@ -5,6 +5,7 @@ const fs = require('fs/promises');
 const chalk = require('chalk');
 const argsObj = require('command-line-parser')() || {};
 const debugprint = argsObj.dp || argsObj.debug || argsObj.debugprint;
+const { version, name } = require('../package.json');
 
 function reachZero(r, v) {
     if (v.v <= 0) return r();
@@ -15,7 +16,7 @@ function printHelp() {
     // Oh no! Anyways...
     // It looks good at least
     console.log(
-        `┌──FeatherFrame Help───────────────────────────────────────────────┐`
+        `┌──« Featherframe Help »───────────────────────────────────────────┐`
     );
     console.log(
         `│ <> - ${chalk.hex('#1ABC9C')('Required')} | [] - ${chalk.hex(
@@ -89,7 +90,7 @@ function printHelp() {
         )})                          │`
     );
     console.log(
-        `└──────────────────────────────────────────────────────────────────┘`
+        `└─${name} v${version}${'─'.repeat(63 - version.length - name.length)}┘`
     );
 }
 
